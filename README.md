@@ -1,4 +1,44 @@
-# Google AI Edge Gallery ✨
+# Google AI Edge Gallery ✨ (aimino fork)
+
+## 🦎 ドロ助 (Drosuke) - Added by this fork
+
+This fork adds **ドロ助 (Drosuke)**, an on-device AI assistant with voice conversation, 2D character animation, and camera vision — all running fully offline.
+
+### Features
+
+- 🎤 **Offline STT** — Voice recognition via [Vosk](https://alphacephei.com/vosk/) (no internet required)
+- 🤖 **On-device LLM** — Powered by Gemma 4 E4B (via Gallery's existing MediaPipe integration)
+- 🔊 **TTS** — Android TextToSpeech reads responses aloud
+- 👾 **2D Character** — Lip-sync animation with per-vowel mouth shapes + random blink
+- 📷 **Camera vision** — Back camera feed (1920px) is passed to the LLM as visual context
+- ✈️ **Fully offline** — Works in airplane mode
+
+### Setup
+
+1. Download Vosk Japanese model: [vosk-model-small-ja-0.22.zip](https://alphacephei.com/vosk/models/vosk-model-small-ja-0.22.zip)
+2. Extract and push to device:
+   ```
+   adb push vosk-model-small-ja-0.22 /sdcard/Android/data/com.google.aiedge.gallery/files/
+   ```
+3. Build and install the app
+4. Select **「ドロ助」** from the LLM category, choose a Gemma model, and tap the mic button
+
+### Added Files
+
+```
+Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/drosuke/
+├── DrosukeCharaView.kt   # 2D character composable (lip-sync + blink)
+├── DrosukeScreen.kt      # Main screen (camera + chara + mic button)
+├── DrosukeTask.kt        # CustomTask registration + system prompt
+├── DrosukeTaskModule.kt  # Hilt module
+└── VoskSttHelper.kt      # Offline STT wrapper (Vosk)
+
+Android/src/app/src/main/res/drawable/
+└── drosuke_*.png         # Character sprite sheets (base + vowel mouths + blink variants)
+```
+
+---
+
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/google-ai-edge/gallery)](https://github.com/google-ai-edge/gallery/releases)
