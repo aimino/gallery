@@ -188,6 +188,7 @@ fun DrosukeScreen(
       putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
       putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
       putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+      putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
     }
     recognizer.startListening(intent)
   }
