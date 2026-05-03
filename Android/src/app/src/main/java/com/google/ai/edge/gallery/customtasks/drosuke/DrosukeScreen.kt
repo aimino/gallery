@@ -171,14 +171,7 @@ fun DrosukeScreen(
   fun startStt() {
     stt?.destroy()
     sttErrorMsg = ""
-    // オンデバイス認識が使えるか確認
-    val onDeviceAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-      SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-    if (!onDeviceAvailable) {
-      sttState = SttState.OFFLINE_UNAVAILABLE
-      return
-    }
-    val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+    val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
     stt = recognizer
     recognizer.setRecognitionListener(object : RecognitionListener {
       override fun onReadyForSpeech(params: Bundle?) { sttState = SttState.LISTENING }
@@ -213,6 +206,13 @@ fun DrosukeScreen(
       putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
     }
     recognizer.startListening(intent)
+    // 10秒でタイムアウト（ネットワークエラーでハングする場合の保険）
+    mainHandler.postDelayed({
+      if (sttState == SttState.LISTENING) {
+        stt?.stopListening()
+        sttState = SttState.IDLE
+      }
+    }, 10_000)
   }
 
   DisposableEffect(Unit) { onDispose { stt?.destroy() } }
