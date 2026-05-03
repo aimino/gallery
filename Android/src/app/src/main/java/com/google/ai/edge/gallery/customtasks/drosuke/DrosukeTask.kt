@@ -1,0 +1,69 @@
+package com.google.ai.edge.gallery.customtasks.drosuke
+
+import android.content.Context
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.runtime.Composable
+import com.google.ai.edge.gallery.customtasks.common.CustomTask
+import com.google.ai.edge.gallery.customtasks.common.CustomTaskData
+import com.google.ai.edge.gallery.data.Category
+import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
+import com.google.ai.edge.litertlm.Contents
+import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+
+private const val SYSTEM_PROMPT = """あなたは「ドロ助」という名前のAIアシスタントです。
+ユーザーの発話に対して、日本語で短く、自然に答えてください。
+回答は2〜3文程度にまとめてください。"""
+
+class DrosukeTask @Inject constructor() : CustomTask {
+
+  override val task = Task(
+    id = "drosuke",
+    label = "ドロ助",
+    description = "音声で話しかけると、ローカルLLMが応答して2Dキャラが口パクで答えます。\n\nSTT（音声認識）→ Gemma（ローカルLLM）→ TTS（音声合成）がすべてオンデバイスで動作します。",
+    shortDescription = "音声会話AIアシスタント",
+    docUrl = "https://github.com/aimino/gallery",
+    sourceCodeUrl = "https://github.com/aimino/gallery",
+    category = Category.LLM,
+    icon = Icons.Outlined.SmartToy,
+    models = mutableListOf(),
+  )
+
+  override fun initializeModelFn(
+    context: Context,
+    coroutineScope: CoroutineScope,
+    model: Model,
+    onDone: (String) -> Unit,
+  ) {
+    LlmChatModelHelper.initialize(
+      context = context,
+      model = model,
+      supportImage = false,
+      supportAudio = false,
+      onDone = onDone,
+      systemInstruction = Contents.of(SYSTEM_PROMPT),
+    )
+  }
+
+  override fun cleanUpModelFn(
+    context: Context,
+    coroutineScope: CoroutineScope,
+    model: Model,
+    onDone: () -> Unit,
+  ) {
+    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
+  }
+
+  @Composable
+  override fun MainScreen(data: Any) {
+    val customTaskData = data as CustomTaskData
+    DrosukeScreen(
+      task = task,
+      modelManagerViewModel = customTaskData.modelManagerViewModel,
+      navigateUp = { /* handled by scaffold */ },
+    )
+  }
+}
