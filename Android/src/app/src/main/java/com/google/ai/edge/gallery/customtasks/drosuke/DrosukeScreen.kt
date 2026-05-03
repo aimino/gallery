@@ -1,6 +1,8 @@
 package com.google.ai.edge.gallery.customtasks.drosuke
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -8,6 +10,9 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,8 +50,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.ui.common.LiveCameraView
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
 import com.google.ai.edge.gallery.ui.common.chat.ChatSide
@@ -69,6 +76,12 @@ fun DrosukeScreen(
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
+  var micPermissionGranted by remember {
+    mutableStateOf(
+      ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+        == PackageManager.PERMISSION_GRANTED
+    )
+  }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var stt by remember { mutableStateOf<SpeechRecognizer?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
@@ -78,6 +91,11 @@ fun DrosukeScreen(
 
   val selectedModel = modelManagerUiState.selectedModel
   val messages = chatUiState.messagesByModel[selectedModel.name] ?: emptyList()
+
+  // マイクパーミッションランチャー
+  val micPermissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { granted -> micPermissionGranted = granted }
 
   // モデル初期化
   LaunchedEffect(modelManagerUiState.modelDownloadStatus[selectedModel.name]) {
@@ -100,7 +118,8 @@ fun DrosukeScreen(
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) { isSpeaking = true }
           override fun onDone(utteranceId: String?) { isSpeaking = false }
-          @Deprecated("Deprecated in Java") override fun onError(utteranceId: String?) { isSpeaking = false }
+          @Deprecated("Deprecated in Java")
+          override fun onError(utteranceId: String?) { isSpeaking = false }
         })
       }
     }
@@ -120,7 +139,7 @@ fun DrosukeScreen(
     chatViewModel.generateResponse(
       model = selectedModel,
       input = text,
-      onError = { Log.e(TAG, "LLM error: $it") },
+      onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
       onDone = {
         sttState = SttState.IDLE
         val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
@@ -143,13 +162,9 @@ fun DrosukeScreen(
       override fun onRmsChanged(rmsdB: Float) {}
       override fun onBufferReceived(buffer: ByteArray?) {}
       override fun onEndOfSpeech() { sttState = SttState.PROCESSING }
-      override fun onError(error: Int) {
-        Log.w(TAG, "STT error: $error")
-        sttState = SttState.IDLE
-      }
+      override fun onError(error: Int) { Log.w(TAG, "STT error: $error"); sttState = SttState.IDLE }
       override fun onResults(results: Bundle?) {
         val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-        Log.d(TAG, "STT result: $text")
         sendToLlm(text)
       }
       override fun onPartialResults(partialResults: Bundle?) {}
@@ -161,26 +176,40 @@ fun DrosukeScreen(
       putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
     }
     recognizer.startListening(intent)
-    sttState = SttState.LISTENING
   }
 
   DisposableEffect(Unit) { onDispose { stt?.destroy() } }
 
-  // UI
   Column(modifier = modifier.fillMaxSize()) {
-    // キャラクター
+    // 上部: カメラ映像 + キャラ重ね表示
     Box(
-      modifier = Modifier.fillMaxWidth().height(240.dp),
-      contentAlignment = Alignment.Center,
+      modifier = Modifier.fillMaxWidth().weight(1f),
     ) {
-      DrosukeCharaView(isSpeaking = isSpeaking, modifier = Modifier.fillMaxSize())
+      // 背面カメラ映像（背景）
+      // imageProxy.close() を必ず呼ぶことでフレームが継続して流れる
+      LiveCameraView(
+        onBitmap = { _, imageProxy -> imageProxy.close() },
+        modifier = Modifier.fillMaxSize(),
+        cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
+      )
+      // キャラクター（右下）
+      DrosukeCharaView(
+        isSpeaking = isSpeaking,
+        modifier = Modifier
+          .height(220.dp)
+          .align(Alignment.BottomEnd)
+          .padding(8.dp),
+      )
     }
 
     // チャット履歴
     LazyColumn(
       state = listState,
-      modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(160.dp)
+        .padding(horizontal = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
       item { Spacer(Modifier.height(4.dp)) }
       items(messages) { msg ->
@@ -200,8 +229,8 @@ fun DrosukeScreen(
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp),
               color = if (isUser) MaterialTheme.colorScheme.onPrimary
-                      else MaterialTheme.colorScheme.onSurfaceVariant,
-              fontSize = 14.sp,
+              else MaterialTheme.colorScheme.onSurfaceVariant,
+              fontSize = 13.sp,
             )
           }
         }
@@ -213,34 +242,39 @@ fun DrosukeScreen(
     Box(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(vertical = 16.dp),
+        .padding(vertical = 12.dp),
       contentAlignment = Alignment.Center,
     ) {
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // 状態ラベル
         Text(
           text = when (sttState) {
-            SttState.IDLE -> ""
+            SttState.IDLE -> if (!micPermissionGranted) "マイクの許可が必要です" else ""
             SttState.LISTENING -> "認識中..."
             SttState.PROCESSING -> "処理中..."
           },
           fontSize = 13.sp,
           color = MaterialTheme.colorScheme.primary,
+          textAlign = TextAlign.Center,
           modifier = Modifier.height(20.dp),
         )
         Spacer(Modifier.height(8.dp))
-        // マイクボタン
         IconButton(
           onClick = {
-            if (sttState == SttState.IDLE && !chatUiState.inProgress) startStt()
+            when {
+              !micPermissionGranted ->
+                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+              sttState == SttState.IDLE && !chatUiState.inProgress ->
+                startStt()
+            }
           },
           modifier = Modifier
-            .size(72.dp)
+            .size(68.dp)
             .clip(CircleShape)
             .background(
               when {
                 sttState == SttState.LISTENING -> MaterialTheme.colorScheme.error
-                chatUiState.inProgress -> MaterialTheme.colorScheme.surfaceVariant
+                chatUiState.inProgress || sttState == SttState.PROCESSING ->
+                  MaterialTheme.colorScheme.surfaceVariant
                 else -> MaterialTheme.colorScheme.primary
               }
             ),
@@ -249,7 +283,7 @@ fun DrosukeScreen(
             Icons.Rounded.Mic,
             contentDescription = "マイク",
             tint = Color.White,
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(34.dp),
           )
         }
       }
