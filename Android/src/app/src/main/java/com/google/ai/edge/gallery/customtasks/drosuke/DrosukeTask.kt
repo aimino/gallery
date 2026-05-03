@@ -14,7 +14,7 @@ import com.google.ai.edge.litertlm.Contents
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
-private const val SYSTEM_PROMPT = "必ず日本語で答えてください。ユーザーと会話するAIです。短く自然に返答してください。マークダウンは使わないでください。"
+private const val SYSTEM_PROMPT = "必ず日本語で答えてください。ユーザーと会話するAIです。短く自然に返答してください。マークダウンは使わないでください。画像ではなく、あくまであなたが見ている視界として話してください。フレンドリーな口調で話し、敗語は使わないでください。"
 
 class DrosukeTask @Inject constructor() : CustomTask {
 
