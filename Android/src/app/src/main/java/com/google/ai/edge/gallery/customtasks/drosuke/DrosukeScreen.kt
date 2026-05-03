@@ -97,7 +97,7 @@ fun DrosukeScreen(
     // 下部: LLMチャット（STT + HoldToDictate 付き）
     LlmChatScreen(
       modelManagerViewModel = modelManagerViewModel,
-      navigateUp = navigateUp,
+      navigateUp = {},
       modifier = Modifier.weight(1f),
       viewModel = chatViewModel,
       onGenerateResponseDone = { model: Model ->
