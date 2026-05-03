@@ -64,7 +64,7 @@ import java.util.Locale
 
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
-private const val MAX_CONVERSATION_TURNS = 10
+private const val MAX_HISTORY_TURNS = 3
 
 enum class SttState { IDLE, LISTENING, PROCESSING, ERROR, OFFLINE_UNAVAILABLE }
 
@@ -78,8 +78,8 @@ fun DrosukeScreen(
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
-  var sessionInitialized by remember { mutableStateOf(false) }
-  var conversationTurnCount by remember { mutableStateOf(0) }
+  // 会話履歴（ユーザー発言 to ドロ助返答）
+  val conversationHistory = remember { mutableListOf<Pair<String, String>>() }
   var micPermissionGranted by remember {
     mutableStateOf(
       ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -141,46 +141,48 @@ fun DrosukeScreen(
     tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, params, UTTERANCE_ID)
   }
 
+  fun buildSystemPrompt(): String {
+    if (conversationHistory.isEmpty()) return DROSUKE_SYSTEM_PROMPT
+    val historyText = conversationHistory.takeLast(MAX_HISTORY_TURNS)
+      .joinToString("\n") { (u, a) -> "ユーザー:${u}\nあなた:${a}" }
+    return "$DROSUKE_SYSTEM_PROMPT\n\n【直前の会話】\n$historyText"
+  }
+
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
     val images = listOfNotNull(latestBitmap)
-
-    val doGenerate: () -> Unit = {
-      chatViewModel.generateResponse(
-        model = selectedModel,
-        input = text,
-        images = images,
-        onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
-        onDone = {
-          sttState = SttState.IDLE
-          conversationTurnCount++
-          val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
-            model = selectedModel,
-            type = ChatMessageType.TEXT,
-            side = ChatSide.AGENT,
-          ) as? ChatMessageText
-          lastMsg?.content?.let { speak(it) }
-        },
-      )
-    }
-
-    // 初回 or ターン上限到達でリセット。それ以外は会話を継続して文脈を保持。
-    if (!sessionInitialized || conversationTurnCount >= MAX_CONVERSATION_TURNS) {
-      conversationTurnCount = 0
-      chatViewModel.resetSession(
-        task = task,
-        model = selectedModel,
-        supportImage = true,
-        systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
-        onDone = {
-          sessionInitialized = true
-          doGenerate()
-        },
-      )
-    } else {
-      doGenerate()
-    }
+    // 毎回リセット（元通り）。ただし履歴をシステムプロンプトに埋め込む
+    chatViewModel.resetSession(
+      task = task,
+      model = selectedModel,
+      supportImage = true,
+      systemInstruction = Contents.of(buildSystemPrompt()),
+      onDone = {
+        chatViewModel.generateResponse(
+          model = selectedModel,
+          input = text,
+          images = images,
+          onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+          onDone = {
+            sttState = SttState.IDLE
+            val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+              model = selectedModel,
+              type = ChatMessageType.TEXT,
+              side = ChatSide.AGENT,
+            ) as? ChatMessageText
+            lastMsg?.content?.let { reply ->
+              speak(reply)
+              // 履歴に追加（超えたら古いものから削除）
+              conversationHistory.add(Pair(text, reply))
+              if (conversationHistory.size > MAX_HISTORY_TURNS) {
+                conversationHistory.removeAt(0)
+              }
+            }
+          },
+        )
+      },
+    )
   }
 
   fun startStt() {
