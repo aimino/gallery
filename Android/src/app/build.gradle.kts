@@ -121,6 +121,7 @@ dependencies {
   debugImplementation(libs.androidx.ui.test.manifest)
   ksp(libs.moshi.kotlin.codegen)
   implementation(libs.mlkit.genai.prompt)
+  implementation("com.alphacephei:vosk-android:0.3.47")
 }
 
 protobuf {

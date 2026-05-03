@@ -4,15 +4,11 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
-import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Build
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
+
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -88,8 +84,15 @@ fun DrosukeScreen(
     )
   }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-  var stt by remember { mutableStateOf<SpeechRecognizer?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
+  val voskModelPath = "/sdcard/Download/vosk-model-small-ja-0.22"
+  val vosk = remember {
+    VoskSttHelper(
+      modelPath = voskModelPath,
+      onResult = { text -> sendToLlm(text) },
+      onError = { msg -> sttState = SttState.ERROR; sttErrorMsg = msg },
+    )
+  }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
@@ -169,53 +172,19 @@ fun DrosukeScreen(
   }
 
   fun startStt() {
-    stt?.destroy()
     sttErrorMsg = ""
-    val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-    stt = recognizer
-    recognizer.setRecognitionListener(object : RecognitionListener {
-      override fun onReadyForSpeech(params: Bundle?) { sttState = SttState.LISTENING }
-      override fun onBeginningOfSpeech() {}
-      override fun onRmsChanged(rmsdB: Float) {}
-      override fun onBufferReceived(buffer: ByteArray?) {}
-      override fun onEndOfSpeech() { sttState = SttState.PROCESSING }
-      override fun onError(error: Int) {
-        val msg = when (error) {
-          SpeechRecognizer.ERROR_NETWORK -> "ネットワークエラー(2)"
-          SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "タイムアウト(3)"
-          SpeechRecognizer.ERROR_NO_MATCH -> "認識失敗(7)"
-          SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "音声タイムアウト(6)"
-          SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "権限不足(9)"
-          else -> "エラー($error)"
-        }
-        Log.w(TAG, "STT error: $msg")
-        sttState = SttState.ERROR
-        sttErrorMsg = msg
-      }
-      override fun onResults(results: Bundle?) {
-        val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-        sendToLlm(text)
-      }
-      override fun onPartialResults(partialResults: Bundle?) {}
-      override fun onEvent(eventType: Int, params: Bundle?) {}
-    })
-    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-      putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-      putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
-      putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-      putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+    if (!vosk.isModelAvailable) {
+      sttState = SttState.ERROR
+      sttErrorMsg = "モデル未配置"
+      return
     }
-    recognizer.startListening(intent)
-    // 10秒でタイムアウト（ネットワークエラーでハングする場合の保険）
-    mainHandler.postDelayed({
-      if (sttState == SttState.LISTENING) {
-        stt?.stopListening()
-        sttState = SttState.IDLE
-      }
-    }, 10_000)
+    if (vosk.init()) {
+      sttState = SttState.LISTENING
+      vosk.startListening()
+    }
   }
 
-  DisposableEffect(Unit) { onDispose { stt?.destroy() } }
+  DisposableEffect(Unit) { onDispose { vosk.destroy() } }
 
   // ドロ助画面は横向き固定
   val activity = context as? Activity
