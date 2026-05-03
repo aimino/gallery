@@ -210,9 +210,10 @@ fun DrosukeScreen(
       modifier = Modifier
         .width(colWidth)
         .height(screenHeight)
-        .absoluteOffset(x = maxWidth - colWidth - 16.dp),
+        .absoluteOffset(x = maxWidth - colWidth - 16.dp)
+        .padding(bottom = 16.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.Center,
+      verticalArrangement = Arrangement.Bottom,
     ) {
       // キャラクター
       DrosukeCharaView(
