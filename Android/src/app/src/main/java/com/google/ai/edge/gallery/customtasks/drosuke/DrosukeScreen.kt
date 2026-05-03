@@ -17,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -182,65 +183,57 @@ fun DrosukeScreen(
     }
   }
 
-  Column(modifier = modifier.fillMaxSize()) {
-    // 上部: カメラ映像 + キャラ重ね表示
-    Box(
-      modifier = Modifier.fillMaxWidth().weight(1f),
+  // カメラ全画面 + 右端にキャラ＆マイクを重ねる
+  Box(modifier = modifier.fillMaxSize()) {
+    // 背面カメラ映像（全画面背景）
+    LiveCameraView(
+      onBitmap = { bitmap, imageProxy ->
+        latestBitmap = bitmap
+        imageProxy.close()
+      },
+      modifier = Modifier.fillMaxSize(),
+      preferredSize = 1920,
+      cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
+    )
+
+    // 右端: キャラ＋マイクボタンを縦に並べる
+    Column(
+      modifier = Modifier
+        .align(Alignment.CenterEnd)
+        .padding(end = 16.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      // 背面カメラ映像（背景）
-      // imageProxy.close() を必ず呼ぶことでフレームが継続して流れる
-      LiveCameraView(
-        onBitmap = { bitmap, imageProxy ->
-          latestBitmap = bitmap
-          imageProxy.close()
-        },
-        modifier = Modifier.fillMaxSize(),
-        preferredSize = 1920,
-        cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
-      )
-      // キャラクター（右下）
+      // キャラクター
       DrosukeCharaView(
         isSpeaking = isSpeaking,
-        modifier = Modifier
-          .height(220.dp)
-          .align(Alignment.BottomEnd)
-          .padding(8.dp),
+        modifier = Modifier.height(180.dp),
       )
-    }
 
-    // テキスト表示なし（音声のみ）
+      // 状態ラベル
+      Text(
+        text = when (sttState) {
+          SttState.IDLE -> if (!micPermissionGranted) "許可必要" else ""
+          SttState.LISTENING -> "認識中..."
+          SttState.PROCESSING -> "処理中..."
+        },
+        fontSize = 11.sp,
+        color = Color.White,
+        textAlign = TextAlign.Center,
+      )
 
-    // マイクボタンエリア
-    Box(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 12.dp),
-      contentAlignment = Alignment.Center,
-    ) {
-      Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-          text = when (sttState) {
-            SttState.IDLE -> if (!micPermissionGranted) "マイクの許可が必要です" else ""
-            SttState.LISTENING -> "認識中..."
-            SttState.PROCESSING -> "処理中..."
-          },
-          fontSize = 13.sp,
-          color = MaterialTheme.colorScheme.primary,
-          textAlign = TextAlign.Center,
-          modifier = Modifier.height(20.dp),
-        )
-        Spacer(Modifier.height(8.dp))
-        IconButton(
-          onClick = {
-            when {
-              !micPermissionGranted ->
-                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-              sttState == SttState.IDLE && !chatUiState.inProgress ->
-                startStt()
-            }
+      // マイクボタン（小さめ）
+      IconButton(
+        onClick = {
+          when {
+            !micPermissionGranted ->
+              micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            sttState == SttState.IDLE && !chatUiState.inProgress ->
+              startStt()
+          }
           },
           modifier = Modifier
-            .size(68.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .background(
               when {
@@ -255,10 +248,9 @@ fun DrosukeScreen(
             Icons.Rounded.Mic,
             contentDescription = "マイク",
             tint = Color.White,
-            modifier = Modifier.size(34.dp),
+            modifier = Modifier.size(24.dp),
           )
         }
-      }
     }
   }
 }
