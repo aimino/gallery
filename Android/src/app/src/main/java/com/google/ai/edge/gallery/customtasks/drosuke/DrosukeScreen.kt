@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Build
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -168,7 +169,15 @@ fun DrosukeScreen(
 
   fun startStt() {
     stt?.destroy()
-    val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+    // Android 13+ はオンデバイス認識を優先
+    val recognizer = if (
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+    ) {
+      SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+    } else {
+      SpeechRecognizer.createSpeechRecognizer(context)
+    }
     stt = recognizer
     recognizer.setRecognitionListener(object : RecognitionListener {
       override fun onReadyForSpeech(params: Bundle?) { sttState = SttState.LISTENING }
