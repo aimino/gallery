@@ -126,9 +126,15 @@ fun DrosukeScreen(
   }
 
   fun speak(text: String) {
+    val clean = text
+      .replace(Regex("\\*+"), "")
+      .replace(Regex("#{1,6}\\s"), "")
+      .replace(Regex("`+"), "")
+      .replace(Regex("_{2,}"), "")
+      .trim()
     val params = Bundle()
     params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, UTTERANCE_ID)
-    tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, UTTERANCE_ID)
+    tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, params, UTTERANCE_ID)
   }
 
   fun sendToLlm(text: String) {
