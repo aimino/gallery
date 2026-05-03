@@ -85,7 +85,9 @@ fun DrosukeScreen(
   }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
-  val voskModelPath = "/sdcard/Download/vosk-model-small-ja-0.22"
+  val voskModelPath = android.os.Environment
+    .getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+    .absolutePath + "/vosk-model-small-ja-0.22"
   val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
