@@ -69,7 +69,7 @@ import java.util.Locale
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
 
-enum class SttState { IDLE, LISTENING, PROCESSING }
+enum class SttState { IDLE, LISTENING, PROCESSING, ERROR, OFFLINE_UNAVAILABLE }
 
 @Composable
 fun DrosukeScreen(
@@ -89,6 +89,7 @@ fun DrosukeScreen(
   }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var stt by remember { mutableStateOf<SpeechRecognizer?>(null) }
+  var sttErrorMsg by remember { mutableStateOf("") }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
@@ -169,15 +170,15 @@ fun DrosukeScreen(
 
   fun startStt() {
     stt?.destroy()
-    // Android 13+ はオンデバイス認識を優先
-    val recognizer = if (
-      Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+    sttErrorMsg = ""
+    // オンデバイス認識が使えるか確認
+    val onDeviceAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
       SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-    ) {
-      SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-    } else {
-      SpeechRecognizer.createSpeechRecognizer(context)
+    if (!onDeviceAvailable) {
+      sttState = SttState.OFFLINE_UNAVAILABLE
+      return
     }
+    val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
     stt = recognizer
     recognizer.setRecognitionListener(object : RecognitionListener {
       override fun onReadyForSpeech(params: Bundle?) { sttState = SttState.LISTENING }
@@ -185,7 +186,19 @@ fun DrosukeScreen(
       override fun onRmsChanged(rmsdB: Float) {}
       override fun onBufferReceived(buffer: ByteArray?) {}
       override fun onEndOfSpeech() { sttState = SttState.PROCESSING }
-      override fun onError(error: Int) { Log.w(TAG, "STT error: $error"); sttState = SttState.IDLE }
+      override fun onError(error: Int) {
+        val msg = when (error) {
+          SpeechRecognizer.ERROR_NETWORK -> "ネットワークエラー(2)"
+          SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "タイムアウト(3)"
+          SpeechRecognizer.ERROR_NO_MATCH -> "認識失敗(7)"
+          SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "音声タイムアウト(6)"
+          SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "権限不足(9)"
+          else -> "エラー($error)"
+        }
+        Log.w(TAG, "STT error: $msg")
+        sttState = SttState.ERROR
+        sttErrorMsg = msg
+      }
       override fun onResults(results: Bundle?) {
         val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
         sendToLlm(text)
@@ -250,6 +263,8 @@ fun DrosukeScreen(
           SttState.IDLE -> if (!micPermissionGranted) "許可必要" else ""
           SttState.LISTENING -> "認識中..."
           SttState.PROCESSING -> "処理中..."
+          SttState.ERROR -> sttErrorMsg
+          SttState.OFFLINE_UNAVAILABLE -> "オフライン不可"
         },
         fontSize = 11.sp,
         color = Color.White,
@@ -262,7 +277,7 @@ fun DrosukeScreen(
           when {
             !micPermissionGranted ->
               micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            sttState == SttState.IDLE && !chatUiState.inProgress ->
+            (sttState == SttState.IDLE || sttState == SttState.ERROR || sttState == SttState.OFFLINE_UNAVAILABLE) && !chatUiState.inProgress ->
               startStt()
           }
           },
