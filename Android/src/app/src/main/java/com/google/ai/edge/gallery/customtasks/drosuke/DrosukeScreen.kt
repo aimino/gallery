@@ -206,7 +206,7 @@ fun DrosukeScreen(
     )
 
     // absoluteOffset で右端に直接配置
-    val colWidth = 160.dp
+    val colWidth = 240.dp
     Column(
       modifier = Modifier
         .width(colWidth)
