@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognitionListener
@@ -103,15 +105,17 @@ fun DrosukeScreen(
   }
 
   // TTS 初期化
+  val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
   DisposableEffect(Unit) {
     val t = TextToSpeech(context) { status ->
       if (status == TextToSpeech.SUCCESS) {
         tts?.language = Locale.JAPANESE
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-          override fun onStart(utteranceId: String?) { isSpeaking = true }
-          override fun onDone(utteranceId: String?) { isSpeaking = false }
+          override fun onStart(utteranceId: String?) { mainHandler.post { isSpeaking = true } }
+          override fun onDone(utteranceId: String?) { mainHandler.post { isSpeaking = false } }
           @Deprecated("Deprecated in Java")
-          override fun onError(utteranceId: String?) { isSpeaking = false }
+          override fun onError(utteranceId: String?) { mainHandler.post { isSpeaking = false } }
         })
       }
     }
@@ -128,7 +132,12 @@ fun DrosukeScreen(
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
-    val images = listOfNotNull(latestBitmap)
+    // Bitmap を 512px に縮小してメモリ節約
+    val images = listOfNotNull(latestBitmap?.let { bmp ->
+      val scale = 512f / maxOf(bmp.width, bmp.height)
+      if (scale < 1f) Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
+      else bmp
+    })
     chatViewModel.generateResponse(
       model = selectedModel,
       input = text,
