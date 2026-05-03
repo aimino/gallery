@@ -141,27 +141,29 @@ fun DrosukeScreen(
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
-    // 毎回リセットして前の回答を引きずるを防ぐ
+    // resetSession 完了待ちで generateResponse を呼ぶ（非同期問題回避）
+    val images = listOfNotNull(latestBitmap)
     chatViewModel.resetSession(
       task = task,
       model = selectedModel,
       supportImage = true,
       systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
-    )
-    val images = listOfNotNull(latestBitmap)
-    chatViewModel.generateResponse(
-      model = selectedModel,
-      input = text,
-      images = images,
-      onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
       onDone = {
-        sttState = SttState.IDLE
-        val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+        chatViewModel.generateResponse(
           model = selectedModel,
-          type = ChatMessageType.TEXT,
-          side = ChatSide.AGENT,
-        ) as? ChatMessageText
-        lastMsg?.content?.let { speak(it) }
+          input = text,
+          images = images,
+          onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+          onDone = {
+            sttState = SttState.IDLE
+            val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+              model = selectedModel,
+              type = ChatMessageType.TEXT,
+              side = ChatSide.AGENT,
+            ) as? ChatMessageText
+            lastMsg?.content?.let { speak(it) }
+          },
+        )
       },
     )
   }
