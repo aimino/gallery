@@ -262,7 +262,6 @@ fun DrosukeScreen(
             modifier = Modifier.size(24.dp),
           )
         }
-      }
     }
   }
 }
