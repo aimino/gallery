@@ -134,6 +134,8 @@ fun DrosukeScreen(
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
+    // 毎回リセットして前の回答を引きずるを防ぐ
+    chatViewModel.resetSession(task = task, model = selectedModel, supportImage = true)
     val images = listOfNotNull(latestBitmap)
     chatViewModel.generateResponse(
       model = selectedModel,
