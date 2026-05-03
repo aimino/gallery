@@ -21,6 +21,7 @@ class VoskSttHelper(private val modelPath: String) {
     get() = File(modelPath).exists()
 
   fun init(): Boolean {
+    Log.i(TAG, "Loading model from: $modelPath (exists=${File(modelPath).exists()})")
     return try {
       model = Model(modelPath)
       Log.i(TAG, "Vosk model loaded: $modelPath")
