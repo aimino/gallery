@@ -134,8 +134,7 @@ fun DrosukeScreen(
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
     // Bitmap を 512px に縮小してメモリ節約
-    // 画像は一旦テキストのみで安定確認（後で復活予定）
-    val images = emptyList<Bitmap>()
+    val images = listOfNotNull(latestBitmap)
     chatViewModel.generateResponse(
       model = selectedModel,
       input = text,
