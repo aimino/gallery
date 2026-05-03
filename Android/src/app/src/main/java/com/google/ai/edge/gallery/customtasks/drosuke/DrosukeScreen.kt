@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.gallery.ui.common.LiveCameraView
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
@@ -141,7 +142,12 @@ fun DrosukeScreen(
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
     // 毎回リセットして前の回答を引きずるを防ぐ
-    chatViewModel.resetSession(task = task, model = selectedModel, supportImage = true)
+    chatViewModel.resetSession(
+      task = task,
+      model = selectedModel,
+      supportImage = true,
+      systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
+    )
     val images = listOfNotNull(latestBitmap)
     chatViewModel.generateResponse(
       model = selectedModel,
