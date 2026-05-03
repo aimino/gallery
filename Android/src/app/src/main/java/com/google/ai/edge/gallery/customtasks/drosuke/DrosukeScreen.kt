@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.drosuke
 
 import android.Manifest
+import android.graphics.Bitmap
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -14,7 +15,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -23,11 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material3.Icon
@@ -47,7 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -84,13 +79,11 @@ fun DrosukeScreen(
   }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var stt by remember { mutableStateOf<SpeechRecognizer?>(null) }
+  var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val chatUiState by chatViewModel.uiState.collectAsState()
-  val listState = rememberLazyListState()
-
   val selectedModel = modelManagerUiState.selectedModel
-  val messages = chatUiState.messagesByModel[selectedModel.name] ?: emptyList()
 
   // マイクパーミッションランチャー
   val micPermissionLauncher = rememberLauncherForActivityResult(
@@ -103,11 +96,6 @@ fun DrosukeScreen(
     if (status?.status?.name == "SUCCEEDED") {
       modelManagerViewModel.initializeModel(context, task = task, model = selectedModel)
     }
-  }
-
-  // メッセージ追加時に自動スクロール
-  LaunchedEffect(messages.size) {
-    if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
   }
 
   // TTS 初期化
@@ -136,9 +124,11 @@ fun DrosukeScreen(
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
+    val images = listOfNotNull(latestBitmap)
     chatViewModel.generateResponse(
       model = selectedModel,
       input = text,
+      images = images,
       onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
       onDone = {
         sttState = SttState.IDLE
@@ -188,7 +178,10 @@ fun DrosukeScreen(
       // 背面カメラ映像（背景）
       // imageProxy.close() を必ず呼ぶことでフレームが継続して流れる
       LiveCameraView(
-        onBitmap = { _, imageProxy -> imageProxy.close() },
+        onBitmap = { bitmap, imageProxy ->
+          latestBitmap = bitmap
+          imageProxy.close()
+        },
         modifier = Modifier.fillMaxSize(),
         cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
       )
@@ -202,41 +195,7 @@ fun DrosukeScreen(
       )
     }
 
-    // チャット履歴
-    LazyColumn(
-      state = listState,
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(160.dp)
-        .padding(horizontal = 12.dp),
-      verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-      item { Spacer(Modifier.height(4.dp)) }
-      items(messages) { msg ->
-        if (msg is ChatMessageText) {
-          val isUser = msg.side == ChatSide.USER
-          Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart,
-          ) {
-            Text(
-              text = msg.content,
-              modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                  if (isUser) MaterialTheme.colorScheme.primary
-                  else MaterialTheme.colorScheme.surfaceVariant
-                )
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-              color = if (isUser) MaterialTheme.colorScheme.onPrimary
-              else MaterialTheme.colorScheme.onSurfaceVariant,
-              fontSize = 13.sp,
-            )
-          }
-        }
-      }
-      item { Spacer(Modifier.height(4.dp)) }
-    }
+    // テキスト表示なし（音声のみ）
 
     // マイクボタンエリア
     Box(
