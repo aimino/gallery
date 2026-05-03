@@ -11,11 +11,9 @@ import java.io.File
 private const val TAG = "VoskSttHelper"
 private const val SAMPLE_RATE = 16000.0f
 
-class VoskSttHelper(
-  private val modelPath: String,
-  private val onResult: (String) -> Unit,
-  private val onError: (String) -> Unit,
-) {
+class VoskSttHelper(private val modelPath: String) {
+  var onResult: ((String) -> Unit)? = null
+  var onError: ((String) -> Unit)? = null
   private var model: Model? = null
   private var speechService: SpeechService? = null
 
@@ -29,14 +27,14 @@ class VoskSttHelper(
       true
     } catch (e: Exception) {
       Log.e(TAG, "Model load failed: ${e.message}")
-      onError("モデル読み込み失敗: ${e.message}")
+      onError?.invoke("モデル読み込み失敗: ${e.message}")
       false
     }
   }
 
   fun startListening() {
     val m = model ?: run {
-      onError("モデル未初期化")
+      onError?.invoke("モデル未初期化")
       return
     }
     try {
@@ -48,18 +46,18 @@ class VoskSttHelper(
         override fun onResult(hypothesis: String?) {
           val text = parseText(hypothesis)
           Log.d(TAG, "result: $text")
-          if (text.isNotBlank()) onResult(text)
+          if (text.isNotBlank()) onResult?.invoke(text)
         }
 
         override fun onFinalResult(hypothesis: String?) {
           val text = parseText(hypothesis)
           Log.d(TAG, "final: $text")
-          if (text.isNotBlank()) onResult(text)
+          if (text.isNotBlank()) onResult?.invoke(text)
         }
 
         override fun onError(e: Exception?) {
           Log.e(TAG, "STT error: ${e?.message}")
-          onError("認識エラー: ${e?.message}")
+          onError?.invoke("認識エラー: ${e?.message}")
         }
 
         override fun onTimeout() {
@@ -69,7 +67,7 @@ class VoskSttHelper(
       Log.i(TAG, "Vosk listening started")
     } catch (e: Exception) {
       Log.e(TAG, "startListening failed: ${e.message}")
-      onError("開始失敗: ${e.message}")
+      onError?.invoke("開始失敗: ${e.message}")
     }
   }
 

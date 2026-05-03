@@ -86,13 +86,7 @@ fun DrosukeScreen(
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
   val voskModelPath = "/sdcard/Download/vosk-model-small-ja-0.22"
-  val vosk = remember {
-    VoskSttHelper(
-      modelPath = voskModelPath,
-      onResult = { text -> sendToLlm(text) },
-      onError = { msg -> sttState = SttState.ERROR; sttErrorMsg = msg },
-    )
-  }
+  val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
@@ -184,7 +178,11 @@ fun DrosukeScreen(
     }
   }
 
-  DisposableEffect(Unit) { onDispose { vosk.destroy() } }
+  DisposableEffect(Unit) {
+    vosk.onResult = { text -> sendToLlm(text) }
+    vosk.onError = { msg -> sttState = SttState.ERROR; sttErrorMsg = msg }
+    onDispose { vosk.destroy() }
+  }
 
   // ドロ助画面は横向き固定
   val activity = context as? Activity
