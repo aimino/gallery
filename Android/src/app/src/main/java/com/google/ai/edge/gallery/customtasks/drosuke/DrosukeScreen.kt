@@ -1,17 +1,37 @@
 package com.google.ai.edge.gallery.customtasks.drosuke
 
+import android.content.Intent
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,24 +39,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
 import com.google.ai.edge.gallery.ui.common.chat.ChatSide
-import com.google.ai.edge.gallery.ui.common.chat.SendMessageTrigger
-import com.google.ai.edge.gallery.ui.common.textandvoiceinput.HoldToDictateViewModel
-import com.google.ai.edge.gallery.ui.common.textandvoiceinput.TextAndVoiceInput
-import com.google.ai.edge.gallery.ui.llmchat.LlmChatScreen
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import java.util.Locale
 
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
+
+enum class SttState { IDLE, LISTENING, PROCESSING }
 
 @Composable
 fun DrosukeScreen(
@@ -47,12 +68,29 @@ fun DrosukeScreen(
 ) {
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
+  var sttState by remember { mutableStateOf(SttState.IDLE) }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+  var stt by remember { mutableStateOf<SpeechRecognizer?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
-  val holdToDictateViewModel: HoldToDictateViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
-  var sendMessageTrigger by remember { mutableStateOf<SendMessageTrigger?>(null) }
-  var clearTextTrigger by remember { mutableStateOf(0L) }
+  val chatUiState by chatViewModel.uiState.collectAsState()
+  val listState = rememberLazyListState()
+
+  val selectedModel = modelManagerUiState.selectedModel
+  val messages = chatUiState.messagesByModel[selectedModel.name] ?: emptyList()
+
+  // モデル初期化
+  LaunchedEffect(modelManagerUiState.modelDownloadStatus[selectedModel.name]) {
+    val status = modelManagerUiState.modelDownloadStatus[selectedModel.name]
+    if (status?.status?.name == "SUCCEEDED") {
+      modelManagerViewModel.initializeModel(context, task = task, model = selectedModel)
+    }
+  }
+
+  // メッセージ追加時に自動スクロール
+  LaunchedEffect(messages.size) {
+    if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+  }
 
   // TTS 初期化
   DisposableEffect(Unit) {
@@ -62,17 +100,12 @@ fun DrosukeScreen(
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) { isSpeaking = true }
           override fun onDone(utteranceId: String?) { isSpeaking = false }
-          @Deprecated("Deprecated in Java")
-          override fun onError(utteranceId: String?) { isSpeaking = false }
+          @Deprecated("Deprecated in Java") override fun onError(utteranceId: String?) { isSpeaking = false }
         })
-        Log.i(TAG, "TTS initialized")
       }
     }
     tts = t
-    onDispose {
-      t.stop()
-      t.shutdown()
-    }
+    onDispose { t.stop(); t.shutdown() }
   }
 
   fun speak(text: String) {
@@ -81,59 +114,145 @@ fun DrosukeScreen(
     tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, UTTERANCE_ID)
   }
 
-  Column(modifier = modifier.fillMaxSize()) {
-    // キャラクター表示エリア
-    Box(
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(240.dp),
-      contentAlignment = Alignment.Center,
-    ) {
-      DrosukeCharaView(
-        isSpeaking = isSpeaking,
-        modifier = Modifier.fillMaxSize(),
-      )
-    }
-
-    // 音声入力バー（キャラの下）
-    TextAndVoiceInput(
-      task = task,
-      processing = chatViewModel.uiState.collectAsState().value.inProgress,
-      holdToDictateViewModel = holdToDictateViewModel,
-      onDone = { text ->
-        if (text.isNotBlank()) {
-          val model = modelManagerUiState.selectedModel
-          sendMessageTrigger = SendMessageTrigger(
-            model = model,
-            messages = listOf(ChatMessageText(content = text, side = ChatSide.USER)),
-          )
-          clearTextTrigger = System.currentTimeMillis()
-        }
-      },
-      onAmplitudeChanged = {},
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 12.dp, vertical = 6.dp),
-    )
-
-    // LLMチャット（テキスト入力UIあり、音声入力は上のバーで代替）
-    LlmChatScreen(
-      modelManagerViewModel = modelManagerViewModel,
-      navigateUp = {},
-      modifier = Modifier.weight(1f),
-      viewModel = chatViewModel,
-      sendMessageTrigger = sendMessageTrigger,
-      onGenerateResponseDone = { model: Model ->
+  fun sendToLlm(text: String) {
+    if (text.isBlank()) return
+    sttState = SttState.PROCESSING
+    chatViewModel.generateResponse(
+      model = selectedModel,
+      input = text,
+      onError = { Log.e(TAG, "LLM error: $it") },
+      onDone = {
+        sttState = SttState.IDLE
         val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
-          model = model,
+          model = selectedModel,
           type = ChatMessageType.TEXT,
           side = ChatSide.AGENT,
         ) as? ChatMessageText
-        val text = lastMsg?.content
-        if (!text.isNullOrBlank()) {
-          speak(text)
-        }
+        lastMsg?.content?.let { speak(it) }
       },
     )
+  }
+
+  fun startStt() {
+    stt?.destroy()
+    val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+    stt = recognizer
+    recognizer.setRecognitionListener(object : RecognitionListener {
+      override fun onReadyForSpeech(params: Bundle?) { sttState = SttState.LISTENING }
+      override fun onBeginningOfSpeech() {}
+      override fun onRmsChanged(rmsdB: Float) {}
+      override fun onBufferReceived(buffer: ByteArray?) {}
+      override fun onEndOfSpeech() { sttState = SttState.PROCESSING }
+      override fun onError(error: Int) {
+        Log.w(TAG, "STT error: $error")
+        sttState = SttState.IDLE
+      }
+      override fun onResults(results: Bundle?) {
+        val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+        Log.d(TAG, "STT result: $text")
+        sendToLlm(text)
+      }
+      override fun onPartialResults(partialResults: Bundle?) {}
+      override fun onEvent(eventType: Int, params: Bundle?) {}
+    })
+    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+      putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+      putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
+      putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+    }
+    recognizer.startListening(intent)
+    sttState = SttState.LISTENING
+  }
+
+  DisposableEffect(Unit) { onDispose { stt?.destroy() } }
+
+  // UI
+  Column(modifier = modifier.fillMaxSize()) {
+    // キャラクター
+    Box(
+      modifier = Modifier.fillMaxWidth().height(240.dp),
+      contentAlignment = Alignment.Center,
+    ) {
+      DrosukeCharaView(isSpeaking = isSpeaking, modifier = Modifier.fillMaxSize())
+    }
+
+    // チャット履歴
+    LazyColumn(
+      state = listState,
+      modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      item { Spacer(Modifier.height(4.dp)) }
+      items(messages) { msg ->
+        if (msg is ChatMessageText) {
+          val isUser = msg.side == ChatSide.USER
+          Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart,
+          ) {
+            Text(
+              text = msg.content,
+              modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                  if (isUser) MaterialTheme.colorScheme.primary
+                  else MaterialTheme.colorScheme.surfaceVariant
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+              color = if (isUser) MaterialTheme.colorScheme.onPrimary
+                      else MaterialTheme.colorScheme.onSurfaceVariant,
+              fontSize = 14.sp,
+            )
+          }
+        }
+      }
+      item { Spacer(Modifier.height(4.dp)) }
+    }
+
+    // マイクボタンエリア
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 16.dp),
+      contentAlignment = Alignment.Center,
+    ) {
+      Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // 状態ラベル
+        Text(
+          text = when (sttState) {
+            SttState.IDLE -> ""
+            SttState.LISTENING -> "認識中..."
+            SttState.PROCESSING -> "処理中..."
+          },
+          fontSize = 13.sp,
+          color = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.height(20.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        // マイクボタン
+        IconButton(
+          onClick = {
+            if (sttState == SttState.IDLE && !chatUiState.inProgress) startStt()
+          },
+          modifier = Modifier
+            .size(72.dp)
+            .clip(CircleShape)
+            .background(
+              when {
+                sttState == SttState.LISTENING -> MaterialTheme.colorScheme.error
+                chatUiState.inProgress -> MaterialTheme.colorScheme.surfaceVariant
+                else -> MaterialTheme.colorScheme.primary
+              }
+            ),
+        ) {
+          Icon(
+            Icons.Rounded.Mic,
+            contentDescription = "マイク",
+            tint = Color.White,
+            modifier = Modifier.size(36.dp),
+          )
+        }
+      }
+    }
   }
 }
