@@ -32,9 +32,11 @@ class DrosukeTask @Inject constructor() : CustomTask {
     models = mutableListOf(),
     // AI Chat と同じモデルをallowlistから名前で参照
     modelNames = listOf(
-      "Gemma-3n-E2B-it-int4",
-      "Gemma-3n-E4B-it-int4",
-      "Gemma3-1B-IT q4",
+      "Gemma-4-E4B-it",
+      "Gemma-4-E2B-it",
+      "Gemma-3n-E4B-it",
+      "Gemma-3n-E2B-it",
+      "Gemma3-1B-IT",
     ),
   )
 
