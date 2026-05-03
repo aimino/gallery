@@ -134,7 +134,8 @@ fun DrosukeScreen(
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
-    // Bitmap を 512px に縮小してメモリ節約
+    // 毎回セッションリセットして以前の回答を繰り返さないようにする
+    chatViewModel.resetSession(task = task, model = selectedModel, supportImage = true)
     val images = listOfNotNull(latestBitmap)
     chatViewModel.generateResponse(
       model = selectedModel,
@@ -218,7 +219,7 @@ fun DrosukeScreen(
       // キャラクター
       DrosukeCharaView(
         isSpeaking = isSpeaking,
-        modifier = Modifier.height(180.dp),
+        modifier = Modifier.height(270.dp),
       )
 
       // 状態ラベル
