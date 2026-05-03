@@ -23,8 +23,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -204,16 +204,16 @@ fun DrosukeScreen(
       cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
     )
 
-    // Row で左側を Spacer にして右側にコンテンツを強制配置
-    Row(modifier = Modifier.fillMaxSize()) {
-      Spacer(modifier = Modifier.weight(1f))
-      Column(
-        modifier = Modifier
-          .height(screenHeight)
-          .padding(end = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-      ) {
+    // absoluteOffset で右端に直接配置
+    val colWidth = 160.dp
+    Column(
+      modifier = Modifier
+        .width(colWidth)
+        .height(screenHeight)
+        .absoluteOffset(x = maxWidth - colWidth - 16.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center,
+    ) {
       // キャラクター
       DrosukeCharaView(
         isSpeaking = isSpeaking,
