@@ -64,6 +64,7 @@ import java.util.Locale
 
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
+private const val MAX_CONVERSATION_TURNS = 10
 
 enum class SttState { IDLE, LISTENING, PROCESSING, ERROR, OFFLINE_UNAVAILABLE }
 
@@ -77,6 +78,8 @@ fun DrosukeScreen(
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
+  var sessionInitialized by remember { mutableStateOf(false) }
+  var conversationTurnCount by remember { mutableStateOf(0) }
   var micPermissionGranted by remember {
     mutableStateOf(
       ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -141,31 +144,43 @@ fun DrosukeScreen(
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
-    // resetSession 完了待ちで generateResponse を呼ぶ（非同期問題回避）
     val images = listOfNotNull(latestBitmap)
-    chatViewModel.resetSession(
-      task = task,
-      model = selectedModel,
-      supportImage = true,
-      systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
-      onDone = {
-        chatViewModel.generateResponse(
-          model = selectedModel,
-          input = text,
-          images = images,
-          onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
-          onDone = {
-            sttState = SttState.IDLE
-            val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
-              model = selectedModel,
-              type = ChatMessageType.TEXT,
-              side = ChatSide.AGENT,
-            ) as? ChatMessageText
-            lastMsg?.content?.let { speak(it) }
-          },
-        )
-      },
-    )
+
+    val doGenerate: () -> Unit = {
+      chatViewModel.generateResponse(
+        model = selectedModel,
+        input = text,
+        images = images,
+        onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+        onDone = {
+          sttState = SttState.IDLE
+          conversationTurnCount++
+          val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+            model = selectedModel,
+            type = ChatMessageType.TEXT,
+            side = ChatSide.AGENT,
+          ) as? ChatMessageText
+          lastMsg?.content?.let { speak(it) }
+        },
+      )
+    }
+
+    // 初回 or ターン上限到達でリセット。それ以外は会話を継続して文脈を保持。
+    if (!sessionInitialized || conversationTurnCount >= MAX_CONVERSATION_TURNS) {
+      conversationTurnCount = 0
+      chatViewModel.resetSession(
+        task = task,
+        model = selectedModel,
+        supportImage = true,
+        systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
+        onDone = {
+          sessionInitialized = true
+          doGenerate()
+        },
+      )
+    } else {
+      doGenerate()
+    }
   }
 
   fun startStt() {
