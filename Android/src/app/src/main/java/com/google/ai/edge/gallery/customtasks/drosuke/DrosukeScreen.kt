@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import android.graphics.Bitmap
+import androidx.camera.core.ImageProxy
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.LiveCameraView
@@ -90,7 +92,7 @@ fun DrosukeScreen(
     ) {
       // カメラ映像（背景）
       LiveCameraView(
-        onBitmapProduced = { /* カメラ映像は表示のみ */ },
+        onBitmap = { _: Bitmap, _: ImageProxy -> /* カメラ映像は表示のみ */ },
         modifier = Modifier.fillMaxSize(),
       )
       // キャラクター（右下）
