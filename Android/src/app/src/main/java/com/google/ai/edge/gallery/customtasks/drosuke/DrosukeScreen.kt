@@ -1,6 +1,8 @@
 package com.google.ai.edge.gallery.customtasks.drosuke
 
 import android.Manifest
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -171,6 +173,15 @@ fun DrosukeScreen(
 
   DisposableEffect(Unit) { onDispose { stt?.destroy() } }
 
+  // ドロ助画面は横向き固定
+  val activity = context as? Activity
+  DisposableEffect(Unit) {
+    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+    onDispose {
+      activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+  }
+
   Column(modifier = modifier.fillMaxSize()) {
     // 上部: カメラ映像 + キャラ重ね表示
     Box(
@@ -184,6 +195,7 @@ fun DrosukeScreen(
           imageProxy.close()
         },
         modifier = Modifier.fillMaxSize(),
+        preferredSize = 1920,
         cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
       )
       // キャラクター（右下）

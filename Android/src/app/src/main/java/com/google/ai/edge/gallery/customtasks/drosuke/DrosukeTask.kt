@@ -49,7 +49,7 @@ class DrosukeTask @Inject constructor() : CustomTask {
     LlmChatModelHelper.initialize(
       context = context,
       model = model,
-      supportImage = false,
+      supportImage = true,
       supportAudio = false,
       onDone = onDone,
       systemInstruction = Contents.of(SYSTEM_PROMPT),
