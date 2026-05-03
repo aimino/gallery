@@ -21,6 +21,7 @@ import androidx.camera.core.CameraSelector
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -190,7 +191,8 @@ fun DrosukeScreen(
   }
 
   // カメラ全画面 + 右端にキャラ＆マイクを重ねる
-  Box(modifier = modifier.fillMaxSize()) {
+  BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    val screenHeight = maxHeight
     // 背面カメラ映像（全画面背景）
     LiveCameraView(
       onBitmap = { bitmap, imageProxy ->
@@ -206,7 +208,9 @@ fun DrosukeScreen(
     Row(modifier = Modifier.fillMaxSize()) {
       Spacer(modifier = Modifier.weight(1f))
       Column(
-        modifier = Modifier.padding(end = 16.dp),
+        modifier = Modifier
+          .height(screenHeight)
+          .padding(end = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
       ) {
