@@ -68,10 +68,12 @@ class DrosukeTask @Inject constructor() : CustomTask {
   @Composable
   override fun MainScreen(data: Any) {
     val customTaskData = data as CustomTaskData
+    // Gallery側のAppBarを非表示にしてLlmChatScreenのAppBarだけにする
+    customTaskData.setTopBarVisible(false)
     DrosukeScreen(
       task = task,
       modelManagerViewModel = customTaskData.modelManagerViewModel,
-      navigateUp = { /* handled by scaffold */ },
+      setTopBarVisible = customTaskData.setTopBarVisible,
     )
   }
 }

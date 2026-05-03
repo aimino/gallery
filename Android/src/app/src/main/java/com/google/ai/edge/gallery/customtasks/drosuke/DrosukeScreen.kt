@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -19,13 +18,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import android.graphics.Bitmap
-import androidx.camera.core.ImageProxy
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.ui.common.LiveCameraView
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
 import com.google.ai.edge.gallery.ui.common.chat.ChatSide
@@ -41,8 +38,8 @@ private const val UTTERANCE_ID = "drosuke_tts"
 fun DrosukeScreen(
   task: Task,
   modelManagerViewModel: ModelManagerViewModel,
-  navigateUp: () -> Unit,
   modifier: Modifier = Modifier,
+  setTopBarVisible: (Boolean) -> Unit = {},
 ) {
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
@@ -84,24 +81,16 @@ fun DrosukeScreen(
   }
 
   Column(modifier = modifier.fillMaxSize()) {
-    // 上部: カメラ映像 + キャラ重ね表示
+    // 上部: キャラクター表示
     Box(
       modifier = Modifier
         .fillMaxWidth()
-        .height(280.dp),
+        .height(240.dp),
+      contentAlignment = Alignment.Center,
     ) {
-      // カメラ映像（背景）
-      LiveCameraView(
-        onBitmap = { _: Bitmap, _: ImageProxy -> /* カメラ映像は表示のみ */ },
-        modifier = Modifier.fillMaxSize(),
-      )
-      // キャラクター（右下）
       DrosukeCharaView(
         isSpeaking = isSpeaking,
-        modifier = Modifier
-          .height(200.dp)
-          .align(Alignment.BottomEnd)
-          .padding(8.dp),
+        modifier = Modifier.fillMaxSize(),
       )
     }
 
