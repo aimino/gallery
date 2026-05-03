@@ -14,8 +14,8 @@ import com.google.ai.edge.litertlm.Contents
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
-private const val SYSTEM_PROMPT = """あなたは「ドロ助」という名前のAIアシスタントです。
-ユーザーの発話に対して、日本語で短く、自然に答えてください。
+private const val SYSTEM_PROMPT = """日本語で短く、自然に答えてください。
+自己紹介や名前は名乗らないでください。
 回答は2〜3文程度にまとめてください。"""
 
 class DrosukeTask @Inject constructor() : CustomTask {

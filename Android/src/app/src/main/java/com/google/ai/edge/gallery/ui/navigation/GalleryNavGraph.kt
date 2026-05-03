@@ -565,12 +565,14 @@ private fun CustomTaskScreen(
         label = "TopPaddingAnimation",
       )
 
+    // ドロ助は全画面なので padding をゼロにする
+    val isFullScreen = task.id == "drosuke"
     Box(
       modifier =
         Modifier.padding(
-          top = if (!hideTopBar) innerPadding.calculateTopPadding() else animatedTopPadding,
-          start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
-          end = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
+          top = if (isFullScreen) 0.dp else if (!hideTopBar) innerPadding.calculateTopPadding() else animatedTopPadding,
+          start = if (isFullScreen) 0.dp else innerPadding.calculateStartPadding(LocalLayoutDirection.current),
+          end = if (isFullScreen) 0.dp else innerPadding.calculateStartPadding(LocalLayoutDirection.current),
         )
     ) {
       val curModelDownloadStatus = modelManagerUiState.modelDownloadStatus[selectedModel.name]
