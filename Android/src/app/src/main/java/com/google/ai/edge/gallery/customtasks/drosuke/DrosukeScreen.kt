@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -133,11 +134,8 @@ fun DrosukeScreen(
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
     // Bitmap を 512px に縮小してメモリ節約
-    val images = listOfNotNull(latestBitmap?.let { bmp ->
-      val scale = 512f / maxOf(bmp.width, bmp.height)
-      if (scale < 1f) Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
-      else bmp
-    })
+    // 画像は一旦テキストのみで安定確認（後で復活予定）
+    val images = emptyList<Bitmap>()
     chatViewModel.generateResponse(
       model = selectedModel,
       input = text,
@@ -205,14 +203,16 @@ fun DrosukeScreen(
       cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
     )
 
-    // 右端: キャラ＋マイクボタンを縦に並べる
-    Column(
-      modifier = Modifier
-        .align(Alignment.CenterEnd)
-        .padding(end = 16.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    // Row で左側を Spacer にして右側にコンテンツを強制配置
+    Row(modifier = Modifier.fillMaxSize()) {
+      Spacer(modifier = Modifier.weight(1f))
+      Column(
+        modifier = Modifier
+          .fillMaxHeight()
+          .padding(end = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+      ) {
       // キャラクター
       DrosukeCharaView(
         isSpeaking = isSpeaking,
@@ -260,6 +260,7 @@ fun DrosukeScreen(
             modifier = Modifier.size(24.dp),
           )
         }
+      }
     }
   }
 }
