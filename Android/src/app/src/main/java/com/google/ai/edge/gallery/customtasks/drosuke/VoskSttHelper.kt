@@ -47,13 +47,19 @@ class VoskSttHelper(private val modelPath: String) {
         override fun onResult(hypothesis: String?) {
           val text = parseText(hypothesis)
           Log.d(TAG, "result: $text")
-          if (text.isNotBlank()) onResult?.invoke(text)
+          if (text.isNotBlank()) {
+            stopListening()  // 認識したら即座に停止
+            onResult?.invoke(text)
+          }
         }
 
         override fun onFinalResult(hypothesis: String?) {
           val text = parseText(hypothesis)
           Log.d(TAG, "final: $text")
-          if (text.isNotBlank()) onResult?.invoke(text)
+          if (text.isNotBlank()) {
+            stopListening()
+            onResult?.invoke(text)
+          }
         }
 
         override fun onError(e: Exception?) {

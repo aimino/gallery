@@ -245,7 +245,7 @@ fun DrosukeScreen(
           when {
             !micPermissionGranted ->
               micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            (sttState == SttState.IDLE || sttState == SttState.ERROR || sttState == SttState.OFFLINE_UNAVAILABLE) && !chatUiState.inProgress ->
+            (sttState == SttState.IDLE || sttState == SttState.ERROR || sttState == SttState.OFFLINE_UNAVAILABLE) && !chatUiState.inProgress && !isSpeaking ->
               startStt()
           }
           },
