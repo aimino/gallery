@@ -91,6 +91,7 @@ fun DrosukeScreen(
   val voskModelPath = context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-small-ja-0.22"
   val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
+  var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val chatUiState by chatViewModel.uiState.collectAsState()
@@ -145,7 +146,7 @@ fun DrosukeScreen(
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     sttState = SttState.PROCESSING
-    val images = listOfNotNull(latestBitmap)
+    val images = listOfNotNull(capturedBitmap ?: latestBitmap)
 
     // 直前の返答をユーザーメッセージに軽く添付して文脈を渡す
     val inputWithContext = if (lastReply.isNotBlank()) {
@@ -191,6 +192,7 @@ fun DrosukeScreen(
       return
     }
     if (vosk.init()) {
+      capturedBitmap = latestBitmap  // 話しかけた瞬間の映像を固定
       sttState = SttState.LISTENING
       vosk.startListening()
     }
