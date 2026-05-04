@@ -37,7 +37,7 @@ fun DrosukeCharaView(
   )
 
   var mouthIndex by remember { mutableIntStateOf(0) }
-  var isBlinking by remember { mutableIntStateOf(0) } // 0: 目開き, 1: まばたき中
+  var isBlinking by remember { mutableIntStateOf(0) }
 
   // 口パクアニメーション
   LaunchedEffect(isSpeaking) {
@@ -61,25 +61,20 @@ fun DrosukeCharaView(
     }
   }
 
-  val baseRes = if (isBlinking == 1) R.drawable.drosuke_blink_chara_base else R.drawable.drosuke_chara_base
-  val mouthRes = if (isSpeaking) {
-    if (isBlinking == 1) blinkMouths[mouthIndex] else mouths[mouthIndex]
-  } else null
+  // オーバーレイなし・1枚切り替え方式（AI生成画像は顔位置が毎回微妙に違うため）
+  val imageRes = when {
+    isSpeaking && isBlinking == 1 -> blinkMouths[mouthIndex]
+    isSpeaking -> mouths[mouthIndex]
+    isBlinking == 1 -> R.drawable.drosuke_blink_chara_base
+    else -> R.drawable.drosuke_chara_base
+  }
 
   Box(modifier = modifier) {
     Image(
-      painter = painterResource(baseRes),
+      painter = painterResource(imageRes),
       contentDescription = "ドロ助",
       modifier = Modifier.fillMaxSize(),
       contentScale = ContentScale.Fit,
     )
-    if (mouthRes != null) {
-      Image(
-        painter = painterResource(mouthRes),
-        contentDescription = null,
-        modifier = Modifier.fillMaxSize(),
-        contentScale = ContentScale.Fit,
-      )
-    }
   }
 }
