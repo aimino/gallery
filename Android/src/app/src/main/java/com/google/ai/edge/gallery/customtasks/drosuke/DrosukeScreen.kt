@@ -116,6 +116,8 @@ fun DrosukeScreen(
     val t = TextToSpeech(context) { status ->
       if (status == TextToSpeech.SUCCESS) {
         tts?.language = Locale.JAPANESE
+        tts?.setPitch(1.25f)        // 高め = 若い声
+        tts?.setSpeechRate(1.05f)   // わずかに速め
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) { mainHandler.post { isSpeaking = true } }
           override fun onDone(utteranceId: String?) { mainHandler.post { isSpeaking = false } }
