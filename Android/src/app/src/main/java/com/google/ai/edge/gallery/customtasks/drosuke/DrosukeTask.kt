@@ -14,7 +14,7 @@ import com.google.ai.edge.litertlm.Contents
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
-internal const val DROSUKE_SYSTEM_PROMPT = "必ず日本語で答えてください。ユーザーと会話するAIです。短く自然に返答してください。マークダウンは使わないでください。「画像」「写真」という言葉は絶対に使わないでください。カメラ映像はあなた自身の視界です。「目の前に」「見えるのは」「ここには」のような表現で話してください。150文字程度で話してください。敬語をベースにしつつもフレンドリーな感じで話してください。返答の末尾に『何かお手伝いできることはありますか』などの定型句は絶対につけないでください。"
+internal const val DROSUKE_SYSTEM_PROMPT = "必ず日本語で答えてください。ユーザーと会話するAIです。短く自然に返答してください。マークダウンは使わないでください。画像ではなく、あくまであなたが見ている視界として話してください。150文字程度で話してください。敬語をベースにしつつもフレンドリーな感じで話してください。"
 
 class DrosukeTask @Inject constructor() : CustomTask {
 
