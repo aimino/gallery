@@ -77,8 +77,8 @@ fun DrosukeScreen(
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
-  // 初回のみ resetSession 、以降はセッションを継続して会話履歴を保持
-  var sessionInitialized by remember { mutableStateOf(false) }
+  // 直前の返答を保持（次のメッセージに context として添付）
+  var lastReply by remember { mutableStateOf("") }
   var micPermissionGranted by remember {
     mutableStateOf(
       ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -145,39 +145,40 @@ fun DrosukeScreen(
     sttState = SttState.PROCESSING
     val images = listOfNotNull(latestBitmap)
 
-    val doGenerate: () -> Unit = {
-      chatViewModel.generateResponse(
-        model = selectedModel,
-        input = text,
-        images = images,
-        onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
-        onDone = {
-          sttState = SttState.IDLE
-          val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
-            model = selectedModel,
-            type = ChatMessageType.TEXT,
-            side = ChatSide.AGENT,
-          ) as? ChatMessageText
-          lastMsg?.content?.let { speak(it) }
-        },
-      )
+    // 直前の返答をユーザーメッセージに軽く添付して文脈を渡す
+    val inputWithContext = if (lastReply.isNotBlank()) {
+      "[Your previous reply: \"$lastReply\"] $text"
+    } else {
+      text
     }
 
-    if (!sessionInitialized) {
-      // 初回のみリセット。以降はセッションを継続して会話履歴を蹋んでいく
-      chatViewModel.resetSession(
-        task = task,
-        model = selectedModel,
-        supportImage = true,
-        systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
-        onDone = {
-          sessionInitialized = true
-          doGenerate()
-        },
-      )
-    } else {
-      doGenerate()
-    }
+    // 毎回リセット（セッション固有のエコーバグ回避）
+    chatViewModel.resetSession(
+      task = task,
+      model = selectedModel,
+      supportImage = true,
+      systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
+      onDone = {
+        chatViewModel.generateResponse(
+          model = selectedModel,
+          input = inputWithContext,
+          images = images,
+          onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+          onDone = {
+            sttState = SttState.IDLE
+            val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+              model = selectedModel,
+              type = ChatMessageType.TEXT,
+              side = ChatSide.AGENT,
+            ) as? ChatMessageText
+            lastMsg?.content?.let { reply ->
+              lastReply = reply
+              speak(reply)
+            }
+          },
+        )
+      },
+    )
   }
 
   fun startStt() {
