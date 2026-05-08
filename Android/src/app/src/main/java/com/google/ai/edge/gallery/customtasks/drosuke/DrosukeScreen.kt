@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -90,6 +91,7 @@ fun DrosukeScreen(
   // アプリ専用外部ストレージ（パーミッション不要）
   val voskModelPath = context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-small-ja-0.22"
   val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
+  var showSubtitle by remember { mutableStateOf(true) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
@@ -116,9 +118,9 @@ fun DrosukeScreen(
   DisposableEffect(Unit) {
     val t = TextToSpeech(context) { status ->
       if (status == TextToSpeech.SUCCESS) {
-        tts?.language = Locale.JAPANESE
-        tts?.setPitch(1.4f)         // 高め = 若い声
-        tts?.setSpeechRate(1.1f)    // 少し速め = 元気な印象
+        tts?.language = Locale.US      // 英語TTSエンジンを使用
+        tts?.setPitch(1.0f)
+        tts?.setSpeechRate(1.1f)
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) { mainHandler.post { isSpeaking = true } }
           override fun onDone(utteranceId: String?) { mainHandler.post { isSpeaking = false } }
@@ -224,6 +226,7 @@ fun DrosukeScreen(
       },
       modifier = Modifier.fillMaxSize(),
       preferredSize = 1920,
+      useHardwarePreview = true,
       cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
     )
 
@@ -258,6 +261,18 @@ fun DrosukeScreen(
         textAlign = TextAlign.Center,
       )
 
+      // 字幕ON/OFFボタン
+      IconButton(
+        onClick = { showSubtitle = !showSubtitle },
+        modifier = Modifier.size(36.dp),
+      ) {
+        Text(
+          text = "CC",
+          color = if (showSubtitle) Color.White else Color.White.copy(alpha = 0.35f),
+          fontSize = 12.sp,
+        )
+      }
+
       // マイクボタン（小さめ）
       IconButton(
         onClick = {
@@ -287,6 +302,31 @@ fun DrosukeScreen(
             modifier = Modifier.size(24.dp),
           )
         }
+    }
+
+    // 字幕オーバーレイ（画面下部中央）
+    if (showSubtitle && lastReply.isNotBlank()) {
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .align(Alignment.BottomCenter)
+          .padding(start = 16.dp, end = 260.dp, bottom = 20.dp),
+        contentAlignment = Alignment.Center,
+      ) {
+        Box(
+          modifier = Modifier
+            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+          Text(
+            text = lastReply,
+            color = Color.White,
+            fontSize = 16.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp,
+          )
+        }
+      }
     }
   }
 }
