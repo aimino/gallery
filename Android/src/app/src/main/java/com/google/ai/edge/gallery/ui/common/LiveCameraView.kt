@@ -27,10 +27,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.lifecycle.awaitInstance
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +54,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -66,6 +69,7 @@ fun LiveCameraView(
   @ImageAnalysis.OutputImageFormat
   outputImageFormat: Int = ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888,
   renderPreview: Boolean = true,
+  useHardwarePreview: Boolean = false,
   cameraSelector: CameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA,
 ) {
   val context = LocalContext.current
@@ -73,6 +77,60 @@ fun LiveCameraView(
   val lifecycleOwner = LocalLifecycleOwner.current
   var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
   var cameraProvider: ProcessCameraProvider? by remember { mutableStateOf(null) }
+
+  // Hardware preview mode: PreviewView を使う場合は専用の起動パスへ
+  if (useHardwarePreview) {
+    val previewView = remember { PreviewView(context) }
+
+    val hardwareLauncher =
+      rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        permissionGranted ->
+        if (permissionGranted) {
+          scope.launch {
+            cameraProvider =
+              startCameraWithHardwarePreview(
+                context = context,
+                lifecycleOwner = lifecycleOwner,
+                onBitmap = onBitmap,
+                preferredSize = preferredSize,
+                outputImageFormat = outputImageFormat,
+                cameraSelector = cameraSelector,
+                previewView = previewView,
+              )
+          }
+        }
+      }
+
+    LaunchedEffect(Unit) {
+      when (PackageManager.PERMISSION_GRANTED) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) -> {
+          cameraProvider =
+            startCameraWithHardwarePreview(
+              context = context,
+              lifecycleOwner = lifecycleOwner,
+              onBitmap = onBitmap,
+              preferredSize = preferredSize,
+              outputImageFormat = outputImageFormat,
+              cameraSelector = cameraSelector,
+              previewView = previewView,
+            )
+        }
+        else -> hardwareLauncher.launch(Manifest.permission.CAMERA)
+      }
+    }
+
+    DisposableEffect(Unit) { onDispose { cameraProvider?.unbindAll() } }
+
+    if (renderPreview) {
+      AndroidView(
+        factory = { previewView },
+        modifier = modifier,
+      )
+    }
+    return
+  }
+
+  // --- 従来モード: ImageAnalysis → Bitmap → Compose Canvas ---
 
   val onBitmapFn: (Bitmap, ImageProxy) -> Unit = { bitmap, imageProxy ->
     imageBitmap = bitmap.asImageBitmap()
@@ -163,6 +221,65 @@ fun LiveCameraView(
       }
     }
   }
+}
+
+/**
+ * ハードウェアPreview（PreviewView）＋ImageAnalysis を同時にバインドする。
+ * PreviewView はハードウェアSurface に直接描画するため、CPU/GPU 負荷に影響されない。
+ * ImageAnalysis は LLM へ渡す Bitmap の取得専用で、プレビュー表示には使わない。
+ */
+private suspend fun startCameraWithHardwarePreview(
+  context: Context,
+  lifecycleOwner: LifecycleOwner,
+  onBitmap: (Bitmap, ImageProxy) -> Unit,
+  preferredSize: Int,
+  @ImageAnalysis.OutputImageFormat outputImageFormat: Int,
+  cameraSelector: CameraSelector,
+  previewView: PreviewView,
+): ProcessCameraProvider {
+  val cameraProvider = ProcessCameraProvider.awaitInstance(context)
+
+  val preview = Preview.Builder().build()
+  preview.setSurfaceProvider(previewView.surfaceProvider)
+
+  val resolutionSelector =
+    ResolutionSelector.Builder()
+      .setResolutionStrategy(
+        ResolutionStrategy(
+          Size(preferredSize, preferredSize),
+          ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+        )
+      )
+      .build()
+  val imageAnalysis =
+    ImageAnalysis.Builder()
+      .setResolutionSelector(resolutionSelector)
+      .setOutputImageFormat(outputImageFormat)
+      .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+      .build()
+      .also {
+        it.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
+          var bitmap = imageProxy.toBitmap()
+          val rotation = imageProxy.imageInfo.rotationDegrees
+          val matrix = Matrix()
+          if (rotation != 0) {
+            matrix.postRotate(rotation.toFloat())
+          }
+          if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+            matrix.postScale(-1f, 1f)
+          }
+          bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+          onBitmap(bitmap, imageProxy)
+        }
+      }
+
+  try {
+    cameraProvider.unbindAll()
+    cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
+  } catch (exc: Exception) {
+    // todo: Handle exceptions
+  }
+  return cameraProvider
 }
 
 /** Asynchronously initializes and starts the camera for image capture and analysis. */
