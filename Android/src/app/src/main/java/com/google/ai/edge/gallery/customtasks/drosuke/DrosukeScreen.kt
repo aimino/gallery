@@ -33,7 +33,6 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -91,7 +90,6 @@ fun DrosukeScreen(
   // アプリ専用外部ストレージ（パーミッション不要）
   val voskModelPath = context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-small-ja-0.22"
   val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
-  var showSubtitle by remember { mutableStateOf(true) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
@@ -255,18 +253,6 @@ fun DrosukeScreen(
         textAlign = TextAlign.Center,
       )
 
-      // 字幕ON/OFFボタン
-      IconButton(
-        onClick = { showSubtitle = !showSubtitle },
-        modifier = Modifier.size(36.dp),
-      ) {
-        Text(
-          text = "CC",
-          color = if (showSubtitle) Color.White else Color.White.copy(alpha = 0.35f),
-          fontSize = 12.sp,
-        )
-      }
-
       // マイクボタン（小さめ）
       IconButton(
         onClick = {
@@ -298,29 +284,5 @@ fun DrosukeScreen(
         }
     }
 
-    // 字幕オーバーレイ（画面下部中央）
-    if (showSubtitle && lastReply.isNotBlank()) {
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .align(Alignment.BottomCenter)
-          .padding(start = 16.dp, end = 260.dp, bottom = 20.dp),
-        contentAlignment = Alignment.Center,
-      ) {
-        Box(
-          modifier = Modifier
-            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-          Text(
-            text = lastReply,
-            color = Color.White,
-            fontSize = 16.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 22.sp,
-          )
-        }
-      }
-    }
   }
 }
