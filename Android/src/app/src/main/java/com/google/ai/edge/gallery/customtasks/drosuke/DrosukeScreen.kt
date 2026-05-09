@@ -116,12 +116,13 @@ fun DrosukeScreen(
   val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
   DisposableEffect(Unit) {
-    val t = TextToSpeech(context) { status ->
+    var t: TextToSpeech? = null
+    t = TextToSpeech(context) { status ->
       if (status == TextToSpeech.SUCCESS) {
-        t.language = Locale.JAPAN   // 日本語TTS（コールバック内なのでtを直接参照）
-        t.setPitch(1.1f)
-        t.setSpeechRate(1.1f)
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+        t?.language = Locale.JAPAN
+        t?.setPitch(1.1f)
+        t?.setSpeechRate(1.1f)
+        t?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) { mainHandler.post { isSpeaking = true } }
           override fun onDone(utteranceId: String?) { mainHandler.post { isSpeaking = false } }
           @Deprecated("Deprecated in Java")
@@ -130,7 +131,7 @@ fun DrosukeScreen(
       }
     }
     tts = t
-    onDispose { t.stop(); t.shutdown() }
+    onDispose { t?.stop(); t?.shutdown() }
   }
 
   fun speak(text: String) {
