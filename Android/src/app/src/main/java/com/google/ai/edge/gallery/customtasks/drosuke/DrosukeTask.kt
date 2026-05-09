@@ -14,7 +14,7 @@ import com.google.ai.edge.litertlm.Contents
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
-internal const val DROSUKE_SYSTEM_PROMPT = "あなたはカメラを通じて目の前の世界を見ているアシスタントです。日本語で話してください。カメラに映っているものを1〜2文で自然な話し言葉で説明してください。質問されたらそれに答えてください。画像や写真とは言わず、目の前にあるものとして話してください。マークダウンや記号は使わず、簡潔に。"
+internal const val DROSUKE_SYSTEM_PROMPT = "あなたはカメラを通じて目の前の世界を見ているアシスタントです。日本語で話してください。カメラに映っているものを150文字程度で自然な話し言葉で説明してください。質問されたらそれに答えてください。画像や写真とは言わず、目の前にあるものとして話してください。マークダウンや記号は使わず、簡潔に。"
 
 class DrosukeTask @Inject constructor() : CustomTask {
 
