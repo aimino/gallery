@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
@@ -78,6 +79,9 @@ fun DrosukeScreen(
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
   var lastReply by remember { mutableStateOf("") }
+  // 移動検知用
+  var lastSceneBitmap by remember { mutableStateOf<Bitmap?>(null) }
+  var lastAutoSpeakTime by remember { mutableStateOf(0L) }
   var micPermissionGranted by remember {
     mutableStateOf(
       ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -144,16 +148,17 @@ fun DrosukeScreen(
     tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, params, UTTERANCE_ID)
   }
 
-  fun sendToLlm(text: String) {
-    if (text.isBlank()) return
+  fun sendToLlm(text: String, isAuto: Boolean = false) {
+    val input = if (isAuto) "今見えている景色や場所について気づいたことを自由に話して" else text
+    if (input.isBlank()) return
     sttState = SttState.PROCESSING
     val images = listOfNotNull(capturedBitmap ?: latestBitmap)
 
     // 直前の返答を添付して文脈を渡す（毎回リセットでエコーバグを回避）
     val inputWithContext = if (lastReply.isNotBlank()) {
-      "[Your previous reply: \"$lastReply\"] $text"
+      "[Your previous reply: \"$lastReply\"] $input"
     } else {
-      text
+      input
     }
 
     chatViewModel.resetSession(
@@ -220,6 +225,24 @@ fun DrosukeScreen(
     LiveCameraView(
       onBitmap = { bitmap, imageProxy ->
         latestBitmap = bitmap
+        // 移動検知：シーン差分が閉値を超えたら自動発話
+        val now = System.currentTimeMillis()
+        val prev = lastSceneBitmap
+        if (prev != null
+            && now - lastAutoSpeakTime > 15_000L
+            && !chatUiState.inProgress
+            && !isSpeaking
+            && sttState == SttState.IDLE
+        ) {
+          val diff = computeBitmapDiff(prev, bitmap)
+          if (diff > 40f) {
+            lastAutoSpeakTime = now
+            lastSceneBitmap = bitmap
+            capturedBitmap = bitmap
+            sendToLlm("", isAuto = true)
+          }
+        }
+        if (prev == null) lastSceneBitmap = bitmap
         imageProxy.close()
       },
       modifier = Modifier.fillMaxSize(),
@@ -291,4 +314,22 @@ fun DrosukeScreen(
     }
 
   }
+}
+
+/** 2枚のBitmapを 32x32 に縮小して画素差分の平均を返す（0〜255） */
+private fun computeBitmapDiff(a: Bitmap, b: Bitmap): Float {
+  val size = 32
+  val ra = Bitmap.createScaledBitmap(a, size, size, false)
+  val rb = Bitmap.createScaledBitmap(b, size, size, false)
+  var diff = 0L
+  for (x in 0 until size) {
+    for (y in 0 until size) {
+      val ca = ra.getPixel(x, y)
+      val cb = rb.getPixel(x, y)
+      diff += kotlin.math.abs(AndroidColor.red(ca) - AndroidColor.red(cb))
+      diff += kotlin.math.abs(AndroidColor.green(ca) - AndroidColor.green(cb))
+      diff += kotlin.math.abs(AndroidColor.blue(ca) - AndroidColor.blue(cb))
+    }
+  }
+  return diff.toFloat() / (size * size * 3)
 }
