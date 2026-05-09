@@ -78,7 +78,6 @@ fun DrosukeScreen(
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
-  var lastReply by remember { mutableStateOf("") }
   // 移動検知用
   var lastSceneBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var lastAutoSpeakTime by remember { mutableStateOf(0L) }
@@ -110,7 +109,7 @@ fun DrosukeScreen(
     val status = modelManagerUiState.modelDownloadStatus[selectedModel.name]
     if (status?.status?.name == "SUCCEEDED") {
       modelManagerViewModel.initializeModel(context, task = task, model = selectedModel)
-      lastReply = ""  // モデル切り替え時は文脈をリセット
+
     }
   }
 
@@ -155,12 +154,6 @@ fun DrosukeScreen(
     val images = listOfNotNull(capturedBitmap ?: latestBitmap)
 
     // 直前の返答を添付して文脈を渡す（毎回リセットでエコーバグを回避）
-    val inputWithContext = if (lastReply.isNotBlank()) {
-      "[Your previous reply: \"$lastReply\"] $input"
-    } else {
-      input
-    }
-
     chatViewModel.resetSession(
       task = task,
       model = selectedModel,
@@ -169,7 +162,7 @@ fun DrosukeScreen(
       onDone = {
         chatViewModel.generateResponse(
           model = selectedModel,
-          input = inputWithContext,
+          input = input,
           images = images,
           onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
           onDone = {
@@ -179,10 +172,7 @@ fun DrosukeScreen(
               type = ChatMessageType.TEXT,
               side = ChatSide.AGENT,
             ) as? ChatMessageText
-            lastMsg?.content?.let { reply ->
-              lastReply = reply
-              speak(reply)
-            }
+            lastMsg?.content?.let { reply -> speak(reply) }
           },
         )
       },
