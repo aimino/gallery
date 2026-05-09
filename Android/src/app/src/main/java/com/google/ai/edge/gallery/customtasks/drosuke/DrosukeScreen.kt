@@ -118,9 +118,9 @@ fun DrosukeScreen(
   DisposableEffect(Unit) {
     val t = TextToSpeech(context) { status ->
       if (status == TextToSpeech.SUCCESS) {
-        tts?.language = Locale.US      // 英語TTSエンジンを使用
-        tts?.setPitch(1.0f)
-        tts?.setSpeechRate(1.1f)
+        t.language = Locale.JAPAN   // 日本語TTS（コールバック内なのでtを直接参照）
+        t.setPitch(1.1f)
+        t.setSpeechRate(1.1f)
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) { mainHandler.post { isSpeaking = true } }
           override fun onDone(utteranceId: String?) { mainHandler.post { isSpeaking = false } }
@@ -150,14 +150,7 @@ fun DrosukeScreen(
     sttState = SttState.PROCESSING
     val images = listOfNotNull(capturedBitmap ?: latestBitmap)
 
-    // 直前の返答をユーザーメッセージに軽く添付して文脈を渡す
-    val inputWithContext = if (lastReply.isNotBlank()) {
-      "[Your previous reply: \"$lastReply\"] $text"
-    } else {
-      text
-    }
-
-    // 毎回リセット（セッション固有のエコーバグ回避）
+    // 毎回リセット（シンプル描写モード）
     chatViewModel.resetSession(
       task = task,
       model = selectedModel,
@@ -166,7 +159,7 @@ fun DrosukeScreen(
       onDone = {
         chatViewModel.generateResponse(
           model = selectedModel,
-          input = inputWithContext,
+          input = text,
           images = images,
           onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
           onDone = {
