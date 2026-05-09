@@ -77,8 +77,9 @@ fun DrosukeScreen(
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
-  // 直前の返答を保持（次のメッセージに context として添付）
   var lastReply by remember { mutableStateOf("") }
+  // セッション初期化済みフラグ（会話継続用）
+  var sessionInitialized by remember { mutableStateOf(false) }
   var micPermissionGranted by remember {
     mutableStateOf(
       ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -107,6 +108,7 @@ fun DrosukeScreen(
     val status = modelManagerUiState.modelDownloadStatus[selectedModel.name]
     if (status?.status?.name == "SUCCEEDED") {
       modelManagerViewModel.initializeModel(context, task = task, model = selectedModel)
+      sessionInitialized = false  // モデル切り替え時はセッションをリセット
     }
   }
 
@@ -149,33 +151,43 @@ fun DrosukeScreen(
     sttState = SttState.PROCESSING
     val images = listOfNotNull(capturedBitmap ?: latestBitmap)
 
-    // 毎回リセット（シンプル描写モード）
-    chatViewModel.resetSession(
-      task = task,
-      model = selectedModel,
-      supportImage = true,
-      systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
-      onDone = {
-        chatViewModel.generateResponse(
-          model = selectedModel,
-          input = text,
-          images = images,
-          onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
-          onDone = {
-            sttState = SttState.IDLE
-            val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
-              model = selectedModel,
-              type = ChatMessageType.TEXT,
-              side = ChatSide.AGENT,
-            ) as? ChatMessageText
-            lastMsg?.content?.let { reply ->
-              lastReply = reply
-              speak(reply)
-            }
-          },
-        )
-      },
-    )
+    fun doGenerate() {
+      chatViewModel.generateResponse(
+        model = selectedModel,
+        input = text,
+        images = images,
+        onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+        onDone = {
+          sttState = SttState.IDLE
+          val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+            model = selectedModel,
+            type = ChatMessageType.TEXT,
+            side = ChatSide.AGENT,
+          ) as? ChatMessageText
+          lastMsg?.content?.let { reply ->
+            lastReply = reply
+            speak(reply)
+          }
+        },
+      )
+    }
+
+    if (!sessionInitialized) {
+      // 初回のみセッション初期化
+      chatViewModel.resetSession(
+        task = task,
+        model = selectedModel,
+        supportImage = true,
+        systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
+        onDone = {
+          sessionInitialized = true
+          doGenerate()
+        },
+      )
+    } else {
+      // 2回目以降は継続して会話
+      doGenerate()
+    }
   }
 
   fun startStt() {
