@@ -176,7 +176,9 @@ fun DrosukeScreen(
           ) as? ChatMessageText
           lastMsg?.content?.let { reply ->
             val trimmed = reply.trim()
-            if (!trimmed.startsWith("スキップ") && trimmed != "スキップ") {
+            val skipWords = listOf("スキップ", "skip", "SKIP")
+            val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
+            if (!shouldSkip) {
               aiText = reply
               speak(reply)
             }
@@ -201,7 +203,17 @@ fun DrosukeScreen(
         sttState = SttState.IDLE
       } else {
         userText = text
-        sendToLlm(text)
+        if (text.contains("新しいゲーム") || text.contains("ニューゲーム") || text.contains("新しいラウンド")) {
+          chatViewModel.resetSession(
+            task = task,
+            model = selectedModel,
+            supportImage = true,
+            systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
+            onDone = { sendToLlm(text) }
+          )
+        } else {
+          sendToLlm(text)
+        }
       }
     }
     vosk.onPartialResult = { partial ->
