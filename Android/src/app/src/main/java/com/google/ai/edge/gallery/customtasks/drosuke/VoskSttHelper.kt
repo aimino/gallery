@@ -18,6 +18,7 @@ class VoskSttHelper(private val modelPath: String) {
   var onError: ((String) -> Unit)? = null
   private var model: Model? = null
   private var speechService: SpeechService? = null
+  private var resultInvoked = false
 
   val isModelAvailable: Boolean
     get() = File(modelPath).exists()
@@ -37,6 +38,7 @@ class VoskSttHelper(private val modelPath: String) {
   }
 
   fun startListening() {
+    resultInvoked = false
     val m = model ?: run {
       onError?.invoke("モデル未初期化")
       return
@@ -55,7 +57,8 @@ class VoskSttHelper(private val modelPath: String) {
         override fun onResult(hypothesis: String?) {
           val text = parseText(hypothesis)
           Log.d(TAG, "result: $text")
-          if (text.isNotBlank()) {
+          if (text.isNotBlank() && !resultInvoked) {
+            resultInvoked = true
             stopListening()
             onResult?.invoke(text)
           }
@@ -64,8 +67,11 @@ class VoskSttHelper(private val modelPath: String) {
         override fun onFinalResult(hypothesis: String?) {
           val text = parseText(hypothesis)
           Log.d(TAG, "final: $text")
-          stopListening()
-          onResult?.invoke(text)
+          if (!resultInvoked) {
+            resultInvoked = true
+            stopListening()
+            onResult?.invoke(text)
+          }
         }
 
         override fun onError(e: Exception?) {

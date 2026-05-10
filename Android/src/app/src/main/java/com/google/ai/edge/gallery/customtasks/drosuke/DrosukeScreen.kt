@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
-import android.graphics.Color as AndroidColor
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
@@ -57,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.gallery.ui.common.LiveCameraView
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
@@ -86,9 +86,6 @@ fun DrosukeScreen(
   var userText by remember { mutableStateOf("") }
   var aiText by remember { mutableStateOf("") }
   var voskReady by remember { mutableStateOf(false) }
-  // 移動検知用
-  var lastSceneBitmap by remember { mutableStateOf<Bitmap?>(null) }
-  var lastAutoSpeakTime by remember { mutableStateOf(0L) }
   var micPermissionGranted by remember {
     mutableStateOf(
       ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -161,24 +158,26 @@ fun DrosukeScreen(
     sttState = SttState.PROCESSING
     val images = listOfNotNull(capturedBitmap ?: latestBitmap)
 
-    chatViewModel.generateResponse(
-      model = selectedModel,
-      input = input,
-      images = images,
-      onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
-      onDone = {
-        sttState = SttState.IDLE
-        val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
-          model = selectedModel,
-          type = ChatMessageType.TEXT,
-          side = ChatSide.AGENT,
-        ) as? ChatMessageText
-        lastMsg?.content?.let { reply ->
-          aiText = reply
-          speak(reply)
-        }
-      },
-    )
+    chatViewModel.resetSession(task, selectedModel, supportImage = true, systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT), onDone = {
+      chatViewModel.generateResponse(
+        model = selectedModel,
+        input = input,
+        images = images,
+        onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+        onDone = {
+          sttState = SttState.IDLE
+          val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+            model = selectedModel,
+            type = ChatMessageType.TEXT,
+            side = ChatSide.AGENT,
+          ) as? ChatMessageText
+          lastMsg?.content?.let { reply ->
+            aiText = reply
+            speak(reply)
+          }
+        },
+      )
+    })
   }
 
   // Voskモデルをバックグラウンドで一度だけロード
@@ -227,24 +226,6 @@ fun DrosukeScreen(
     LiveCameraView(
       onBitmap = { bitmap, imageProxy ->
         latestBitmap = bitmap
-        // 移動検知：シーン差分が閾値を超えたら自動発話
-        val now = System.currentTimeMillis()
-        val prev = lastSceneBitmap
-        if (prev != null
-            && now - lastAutoSpeakTime > 15_000L
-            && !chatUiState.inProgress
-            && !isSpeaking
-            && sttState == SttState.IDLE
-        ) {
-          val diff = computeBitmapDiff(prev, bitmap)
-          if (diff > 40f) {
-            lastAutoSpeakTime = now
-            lastSceneBitmap = bitmap
-            capturedBitmap = bitmap
-            sendToLlm("", isAuto = true)
-          }
-        }
-        if (prev == null) lastSceneBitmap = bitmap
         imageProxy.close()
       },
       modifier = Modifier.fillMaxSize(),
@@ -388,22 +369,4 @@ fun DrosukeScreen(
       }
     }
   }
-}
-
-/** 2枚のBitmapを 32x32 に縮小して画素差分の平均を返す（0〜255） */
-private fun computeBitmapDiff(a: Bitmap, b: Bitmap): Float {
-  val size = 32
-  val ra = Bitmap.createScaledBitmap(a, size, size, false)
-  val rb = Bitmap.createScaledBitmap(b, size, size, false)
-  var diff = 0L
-  for (x in 0 until size) {
-    for (y in 0 until size) {
-      val ca = ra.getPixel(x, y)
-      val cb = rb.getPixel(x, y)
-      diff += kotlin.math.abs(AndroidColor.red(ca) - AndroidColor.red(cb))
-      diff += kotlin.math.abs(AndroidColor.green(ca) - AndroidColor.green(cb))
-      diff += kotlin.math.abs(AndroidColor.blue(ca) - AndroidColor.blue(cb))
-    }
-  }
-  return diff.toFloat() / (size * size * 3)
 }
