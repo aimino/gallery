@@ -7,8 +7,12 @@ import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.os.Handler
 import android.os.Looper
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.speech.RecognitionListener as AndroidRecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -98,6 +102,8 @@ fun DrosukeScreen(
   // アプリ専用外部ストレージ（パーミッション不要）
   val voskModelPath = context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-ja-0.22"
   val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
+  var useGoogleStt by remember { mutableStateOf(true) }
+  val googleSttHolder = remember { object { var recognizer: SpeechRecognizer? = null } }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var lastSceneBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -161,31 +167,29 @@ fun DrosukeScreen(
     sttState = SttState.PROCESSING
     val images = listOfNotNull(capturedBitmap ?: latestBitmap)
 
-    chatViewModel.resetSession(task, selectedModel, supportImage = true, systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT), onDone = {
-      chatViewModel.generateResponse(
-        model = selectedModel,
-        input = input,
-        images = images,
-        onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
-        onDone = {
-          sttState = SttState.IDLE
-          val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
-            model = selectedModel,
-            type = ChatMessageType.TEXT,
-            side = ChatSide.AGENT,
-          ) as? ChatMessageText
-          lastMsg?.content?.let { reply ->
-            val trimmed = reply.trim()
-            val skipWords = listOf("スキップ", "skip", "SKIP")
-            val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
-            if (!shouldSkip) {
-              aiText = reply
-              speak(reply)
-            }
+    chatViewModel.generateResponse(
+      model = selectedModel,
+      input = input,
+      images = images,
+      onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+      onDone = {
+        sttState = SttState.IDLE
+        val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+          model = selectedModel,
+          type = ChatMessageType.TEXT,
+          side = ChatSide.AGENT,
+        ) as? ChatMessageText
+        lastMsg?.content?.let { reply ->
+          val trimmed = reply.trim()
+          val skipWords = listOf("スキップ", "skip", "SKIP")
+          val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
+          if (!shouldSkip) {
+            aiText = reply
+            speak(reply)
           }
-        },
-      )
-    })
+        }
+      },
+    )
   }
 
   // Voskモデルをバックグラウンドで一度だけロード
@@ -225,6 +229,13 @@ fun DrosukeScreen(
     }
     vosk.onError = { msg -> sttState = SttState.ERROR; sttErrorMsg = msg }
     onDispose { vosk.destroy() }
+  }
+
+  DisposableEffect(Unit) {
+    onDispose {
+      googleSttHolder.recognizer?.destroy()
+      googleSttHolder.recognizer = null
+    }
   }
 
   // ドロ助画面は横向き固定
@@ -346,6 +357,7 @@ fun DrosukeScreen(
         text = when (sttState) {
           SttState.IDLE -> when {
             !micPermissionGranted -> "許可必要"
+            useGoogleStt -> ""
             !voskReady && vosk.isModelAvailable -> "初期化中..."
             !vosk.isModelAvailable -> "モデル未配置"
             else -> ""
@@ -371,7 +383,63 @@ fun DrosukeScreen(
             when {
               !micPermissionGranted ->
                 micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-              voskReady && (sttState == SttState.IDLE || sttState == SttState.ERROR)
+              useGoogleStt && (sttState == SttState.IDLE || sttState == SttState.ERROR)
+                  && !chatUiState.inProgress && !isSpeaking -> {
+                capturedBitmap = latestBitmap
+                sttState = SttState.LISTENING
+                val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                googleSttHolder.recognizer = recognizer
+                recognizer.setRecognitionListener(object : AndroidRecognitionListener {
+                  override fun onReadyForSpeech(params: Bundle?) {}
+                  override fun onBeginningOfSpeech() {}
+                  override fun onRmsChanged(rmsdB: Float) {}
+                  override fun onBufferReceived(buffer: ByteArray?) {}
+                  override fun onEndOfSpeech() {}
+                  override fun onError(error: Int) {
+                    mainHandler.post { sttState = SttState.IDLE }
+                  }
+                  override fun onResults(results: Bundle?) {
+                    val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                    mainHandler.post {
+                      googleSttHolder.recognizer?.destroy()
+                      googleSttHolder.recognizer = null
+                      if (text.isBlank()) {
+                        sttState = SttState.IDLE
+                      } else {
+                        userText = text
+                        if (text.contains("新しいゲーム") || text.contains("ニューゲーム") || text.contains("新しいラウンド")) {
+                          chatViewModel.resetSession(
+                            task = task,
+                            model = selectedModel,
+                            supportImage = true,
+                            systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
+                            onDone = { sendToLlm(text) }
+                          )
+                        } else {
+                          sendToLlm(text)
+                        }
+                      }
+                    }
+                  }
+                  override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                    if (partial.isNotBlank() && isSpeaking) {
+                      mainHandler.post {
+                        tts?.stop()
+                        isSpeaking = false
+                      }
+                    }
+                  }
+                  override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                  putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
+                  putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                  putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                }
+                recognizer.startListening(intent)
+              }
+              !useGoogleStt && voskReady && (sttState == SttState.IDLE || sttState == SttState.ERROR)
                   && !chatUiState.inProgress && !isSpeaking -> {
                 capturedBitmap = latestBitmap
                 sttState = SttState.LISTENING
@@ -396,6 +464,23 @@ fun DrosukeScreen(
             contentDescription = "マイク",
             tint = Color.White,
             modifier = Modifier.size(24.dp),
+          )
+        }
+        IconButton(
+          onClick = { useGoogleStt = !useGoogleStt },
+          modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(
+              if (useGoogleStt) Color(0xFF4285F4).copy(alpha = 0.85f)
+              else MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+            ),
+        ) {
+          Text(
+            text = if (useGoogleStt) "G" else "V",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
           )
         }
       }
