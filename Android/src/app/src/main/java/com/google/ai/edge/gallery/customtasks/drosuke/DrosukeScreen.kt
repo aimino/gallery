@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
@@ -99,6 +100,8 @@ fun DrosukeScreen(
   val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+  var lastSceneBitmap by remember { mutableStateOf<Bitmap?>(null) }
+  var lastAutoSpeakTime by remember { mutableStateOf(0L) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val chatUiState by chatViewModel.uiState.collectAsState()
@@ -152,7 +155,7 @@ fun DrosukeScreen(
   }
 
   fun sendToLlm(text: String, isAuto: Boolean = false) {
-    val input = if (isAuto) "今見えている景色や場所について気づいたことを自由に話して" else text
+    val input = if (isAuto) "GeoGuesserで場所を特定するために、今初めて気づいた重要な手がかりがあれば教えて。すでに話した内容や曖昧な情報は不要。新しい手がかりがなければ「スキップ」とだけ返して。" else text
     if (input.isBlank()) return
     if (!isAuto) userText = text
     sttState = SttState.PROCESSING
@@ -172,8 +175,11 @@ fun DrosukeScreen(
             side = ChatSide.AGENT,
           ) as? ChatMessageText
           lastMsg?.content?.let { reply ->
-            aiText = reply
-            speak(reply)
+            val trimmed = reply.trim()
+            if (!trimmed.startsWith("スキップ") && trimmed != "スキップ") {
+              aiText = reply
+              speak(reply)
+            }
           }
         },
       )
@@ -226,6 +232,20 @@ fun DrosukeScreen(
     LiveCameraView(
       onBitmap = { bitmap, imageProxy ->
         latestBitmap = bitmap
+        val prev = lastSceneBitmap
+        val now = System.currentTimeMillis()
+        if (prev == null) {
+          lastSceneBitmap = bitmap
+        } else if (now - lastAutoSpeakTime > 30_000L
+          && !chatUiState.inProgress && !isSpeaking && sttState == SttState.IDLE) {
+          val diff = computeBitmapDiff(prev, bitmap)
+          if (diff > 50f) {
+            lastAutoSpeakTime = now
+            lastSceneBitmap = bitmap
+            capturedBitmap = bitmap
+            sendToLlm("", isAuto = true)
+          }
+        }
         imageProxy.close()
       },
       modifier = Modifier.fillMaxSize(),
@@ -369,4 +389,21 @@ fun DrosukeScreen(
       }
     }
   }
+}
+
+private fun computeBitmapDiff(a: Bitmap, b: Bitmap): Float {
+  val size = 32
+  val sa = Bitmap.createScaledBitmap(a, size, size, false)
+  val sb = Bitmap.createScaledBitmap(b, size, size, false)
+  var diff = 0f
+  for (y in 0 until size) {
+    for (x in 0 until size) {
+      val pa = sa.getPixel(x, y)
+      val pb = sb.getPixel(x, y)
+      diff += kotlin.math.abs(AndroidColor.red(pa) - AndroidColor.red(pb))
+      diff += kotlin.math.abs(AndroidColor.green(pa) - AndroidColor.green(pb))
+      diff += kotlin.math.abs(AndroidColor.blue(pa) - AndroidColor.blue(pb))
+    }
+  }
+  return diff / (size * size * 3)
 }
