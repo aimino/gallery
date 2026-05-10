@@ -21,14 +21,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.absoluteOffset
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material3.Icon
@@ -48,19 +50,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.gallery.ui.common.LiveCameraView
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
 import com.google.ai.edge.gallery.ui.common.chat.ChatSide
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 private const val TAG = "DrosukeScreen"
@@ -78,6 +82,10 @@ fun DrosukeScreen(
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
+  var subtitleVisible by remember { mutableStateOf(true) }
+  var userText by remember { mutableStateOf("") }
+  var aiText by remember { mutableStateOf("") }
+  var voskReady by remember { mutableStateOf(false) }
   // 移動検知用
   var lastSceneBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var lastAutoSpeakTime by remember { mutableStateOf(0L) }
@@ -109,7 +117,6 @@ fun DrosukeScreen(
     val status = modelManagerUiState.modelDownloadStatus[selectedModel.name]
     if (status?.status?.name == "SUCCEEDED") {
       modelManagerViewModel.initializeModel(context, task = task, model = selectedModel)
-
     }
   }
 
@@ -150,51 +157,55 @@ fun DrosukeScreen(
   fun sendToLlm(text: String, isAuto: Boolean = false) {
     val input = if (isAuto) "今見えている景色や場所について気づいたことを自由に話して" else text
     if (input.isBlank()) return
+    if (!isAuto) userText = text
     sttState = SttState.PROCESSING
     val images = listOfNotNull(capturedBitmap ?: latestBitmap)
 
-    // 直前の返答を添付して文脈を渡す（毎回リセットでエコーバグを回避）
-    chatViewModel.resetSession(
-      task = task,
+    chatViewModel.generateResponse(
       model = selectedModel,
-      supportImage = true,
-      systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
+      input = input,
+      images = images,
+      onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
       onDone = {
-        chatViewModel.generateResponse(
+        sttState = SttState.IDLE
+        val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
           model = selectedModel,
-          input = input,
-          images = images,
-          onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
-          onDone = {
-            sttState = SttState.IDLE
-            val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
-              model = selectedModel,
-              type = ChatMessageType.TEXT,
-              side = ChatSide.AGENT,
-            ) as? ChatMessageText
-            lastMsg?.content?.let { reply -> speak(reply) }
-          },
-        )
+          type = ChatMessageType.TEXT,
+          side = ChatSide.AGENT,
+        ) as? ChatMessageText
+        lastMsg?.content?.let { reply ->
+          aiText = reply
+          speak(reply)
+        }
       },
     )
   }
 
-  fun startStt() {
-    sttErrorMsg = ""
-    if (!vosk.isModelAvailable) {
-      sttState = SttState.ERROR
-      sttErrorMsg = "モデル未配置"
-      return
-    }
-    if (vosk.init()) {
-      capturedBitmap = latestBitmap  // 話しかけた瞬間の映像を固定
-      sttState = SttState.LISTENING
-      vosk.startListening()
+  // Voskモデルをバックグラウンドで一度だけロード
+  LaunchedEffect(micPermissionGranted) {
+    if (micPermissionGranted && !voskReady && vosk.isModelAvailable) {
+      val success = withContext(Dispatchers.IO) { vosk.init() }
+      if (success) voskReady = true
     }
   }
 
+  // Vosk コールバック設定
   DisposableEffect(Unit) {
-    vosk.onResult = { text -> sendToLlm(text) }
+    vosk.onResult = { text ->
+      if (text.isBlank()) {
+        sttState = SttState.IDLE
+      } else {
+        userText = text
+        sendToLlm(text)
+      }
+    }
+    vosk.onPartialResult = { partial ->
+      // ユーザーが話し始めたら TTS を即座にキャンセル（割り込み優先）
+      if (partial.isNotBlank() && isSpeaking) {
+        tts?.stop()
+        isSpeaking = false
+      }
+    }
     vosk.onError = { msg -> sttState = SttState.ERROR; sttErrorMsg = msg }
     onDispose { vosk.destroy() }
   }
@@ -208,14 +219,15 @@ fun DrosukeScreen(
     }
   }
 
-  // カメラ全画面 + 右端にキャラ＆マイクを重ねる
+  // カメラ全画面 + オーバーレイ UI
   BoxWithConstraints(modifier = modifier.fillMaxSize()) {
     val screenHeight = maxHeight
+
     // 背面カメラ映像（全画面背景）
     LiveCameraView(
       onBitmap = { bitmap, imageProxy ->
         latestBitmap = bitmap
-        // 移動検知：シーン差分が閉値を超えたら自動発話
+        // 移動検知：シーン差分が閾値を超えたら自動発話
         val now = System.currentTimeMillis()
         val prev = lastSceneBitmap
         if (prev != null
@@ -241,7 +253,65 @@ fun DrosukeScreen(
       cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
     )
 
-    // absoluteOffset で右端に直接配置
+    // 字幕オーバーレイ（画面下部中央）
+    if (subtitleVisible && (userText.isNotBlank() || aiText.isNotBlank())) {
+      Box(
+        modifier = Modifier
+          .align(Alignment.BottomStart)
+          .fillMaxWidth(0.72f)
+          .padding(start = 16.dp, bottom = 20.dp),
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.65f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          if (userText.isNotBlank()) {
+            Text(
+              text = "あなた：$userText",
+              fontSize = 13.sp,
+              color = Color(0xFFADD8E6),  // ライトブルー
+              fontWeight = FontWeight.Normal,
+              maxLines = 2,
+            )
+          }
+          if (aiText.isNotBlank()) {
+            Text(
+              text = "ドロ助：${aiText.take(100)}${if (aiText.length > 100) "…" else ""}",
+              fontSize = 13.sp,
+              color = Color.White,
+              maxLines = 3,
+            )
+          }
+        }
+      }
+    }
+
+    // CC ボタン（左上に固定・半透明）
+    IconButton(
+      onClick = { subtitleVisible = !subtitleVisible },
+      modifier = Modifier
+        .align(Alignment.TopStart)
+        .padding(top = 16.dp, start = 16.dp)
+        .size(40.dp)
+        .clip(CircleShape)
+        .background(
+          if (subtitleVisible) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+          else Color.Gray.copy(alpha = 0.5f)
+        ),
+    ) {
+      Text(
+        text = "CC",
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color.White,
+      )
+    }
+
+    // 右端パネル：キャラ＆ボタン
     val colWidth = 240.dp
     Column(
       modifier = Modifier
@@ -261,7 +331,12 @@ fun DrosukeScreen(
       // 状態ラベル
       Text(
         text = when (sttState) {
-          SttState.IDLE -> if (!micPermissionGranted) "許可必要" else ""
+          SttState.IDLE -> when {
+            !micPermissionGranted -> "許可必要"
+            !voskReady && vosk.isModelAvailable -> "初期化中..."
+            !vosk.isModelAvailable -> "モデル未配置"
+            else -> ""
+          }
           SttState.LISTENING -> "認識中..."
           SttState.PROCESSING -> "処理中..."
           SttState.ERROR -> sttErrorMsg
@@ -272,15 +347,24 @@ fun DrosukeScreen(
         textAlign = TextAlign.Center,
       )
 
-      // マイクボタン（小さめ）
-      IconButton(
-        onClick = {
-          when {
-            !micPermissionGranted ->
-              micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            (sttState == SttState.IDLE || sttState == SttState.ERROR || sttState == SttState.OFFLINE_UNAVAILABLE) && !chatUiState.inProgress && !isSpeaking ->
-              startStt()
-          }
+      // マイクボタン（手動）
+      Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        // マイクボタン（手動でも押せる）
+        IconButton(
+          onClick = {
+            when {
+              !micPermissionGranted ->
+                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+              voskReady && (sttState == SttState.IDLE || sttState == SttState.ERROR)
+                  && !chatUiState.inProgress && !isSpeaking -> {
+                capturedBitmap = latestBitmap
+                sttState = SttState.LISTENING
+                vosk.startListening()
+              }
+            }
           },
           modifier = Modifier
             .size(48.dp)
@@ -301,8 +385,8 @@ fun DrosukeScreen(
             modifier = Modifier.size(24.dp),
           )
         }
+      }
     }
-
   }
 }
 
