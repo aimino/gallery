@@ -96,7 +96,7 @@ fun DrosukeScreen(
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
   // アプリ専用外部ストレージ（パーミッション不要）
-  val voskModelPath = context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-small-ja-0.22"
+  val voskModelPath = context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-ja-0.22"
   val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
