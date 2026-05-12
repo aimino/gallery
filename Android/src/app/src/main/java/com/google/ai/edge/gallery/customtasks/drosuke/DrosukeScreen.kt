@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
-import android.graphics.Color as AndroidColor
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,9 +29,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -95,22 +90,24 @@ fun DrosukeScreen(
   }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
-  // アプリ専用外部ストレージ（パーミッション不要）
   val voskModelPath = context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-ja-0.22"
   val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
-  var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-  var lastSceneBitmap by remember { mutableStateOf<Bitmap?>(null) }
-  var lastAutoSpeakTime by remember { mutableStateOf(0L) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val chatUiState by chatViewModel.uiState.collectAsState()
   val selectedModel = modelManagerUiState.selectedModel
 
-  // マイクパーミッションランチャー
+  // マイクパーミッション自動要求
   val micPermissionLauncher = rememberLauncherForActivityResult(
     ActivityResultContracts.RequestPermission()
   ) { granted -> micPermissionGranted = granted }
+
+  LaunchedEffect(Unit) {
+    if (!micPermissionGranted) {
+      micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+  }
 
   // モデル初期化
   LaunchedEffect(modelManagerUiState.modelDownloadStatus[selectedModel.name]) {
@@ -154,20 +151,18 @@ fun DrosukeScreen(
     tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, params, UTTERANCE_ID)
   }
 
-  fun sendToLlm(text: String, isAuto: Boolean = false) {
-    val input = if (isAuto) "GeoGuesserで場所を特定するために、今初めて気づいた重要な手がかりがあれば教えて。すでに話した内容や曖昧な情報は不要。新しい手がかりがなければ「スキップ」とだけ返して。" else text
-    if (input.isBlank()) return
-    if (!isAuto) userText = text
+  fun sendToLlm(text: String) {
+    if (text.isBlank()) return
+    userText = text
     sttState = SttState.PROCESSING
-    val images = listOfNotNull(capturedBitmap ?: latestBitmap)
+    val images = listOfNotNull(latestBitmap)
 
     chatViewModel.generateResponse(
       model = selectedModel,
-      input = input,
+      input = text,
       images = images,
       onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
       onDone = {
-        sttState = SttState.IDLE
         val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
           model = selectedModel,
           type = ChatMessageType.TEXT,
@@ -178,10 +173,13 @@ fun DrosukeScreen(
           val skipWords = listOf("スキップ", "skip", "SKIP")
           val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
           if (!shouldSkip) {
+            // TTSのonStart非同期前にフラグを立ててListening再開の競合を防ぐ
+            isSpeaking = true
             aiText = reply
             speak(reply)
           }
         }
+        sttState = SttState.IDLE
       },
     )
   }
@@ -198,7 +196,7 @@ fun DrosukeScreen(
   DisposableEffect(Unit) {
     vosk.onResult = { text ->
       if (text.isBlank()) {
-        sttState = SttState.IDLE
+        sttState = SttState.IDLE  // 常時リッスンのLaunchedEffectが再開する
       } else {
         userText = text
         if (text.contains("新しいゲーム") || text.contains("ニューゲーム") || text.contains("新しいラウンド")) {
@@ -225,6 +223,15 @@ fun DrosukeScreen(
     onDispose { vosk.destroy() }
   }
 
+  // 常時リッスン: Vosk準備完了後、LLM/TTS停止後に自動で再開
+  LaunchedEffect(voskReady, chatUiState.inProgress, isSpeaking, micPermissionGranted, sttState) {
+    if (voskReady && micPermissionGranted && !chatUiState.inProgress && !isSpeaking
+        && sttState == SttState.IDLE) {
+      sttState = SttState.LISTENING
+      vosk.startListening()
+    }
+  }
+
   // ドロ助画面は横向き固定
   val activity = context as? Activity
   DisposableEffect(Unit) {
@@ -242,20 +249,6 @@ fun DrosukeScreen(
     LiveCameraView(
       onBitmap = { bitmap, imageProxy ->
         latestBitmap = bitmap
-        val prev = lastSceneBitmap
-        val now = System.currentTimeMillis()
-        if (prev == null) {
-          lastSceneBitmap = bitmap
-        } else if (now - lastAutoSpeakTime > 30_000L
-          && !chatUiState.inProgress && !isSpeaking && sttState == SttState.IDLE) {
-          val diff = computeBitmapDiff(prev, bitmap)
-          if (diff > 50f) {
-            lastAutoSpeakTime = now
-            lastSceneBitmap = bitmap
-            capturedBitmap = bitmap
-            sendToLlm("", isAuto = true)
-          }
-        }
         imageProxy.close()
       },
       modifier = Modifier.fillMaxSize(),
@@ -264,7 +257,7 @@ fun DrosukeScreen(
       cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
     )
 
-    // 字幕オーバーレイ（画面下部中央）
+    // 字幕オーバーレイ（画面下部左側）
     if (subtitleVisible && (userText.isNotBlank() || aiText.isNotBlank())) {
       Box(
         modifier = Modifier
@@ -284,7 +277,7 @@ fun DrosukeScreen(
             Text(
               text = "あなた：$userText",
               fontSize = 13.sp,
-              color = Color(0xFFADD8E6),  // ライトブルー
+              color = Color(0xFFADD8E6),
               fontWeight = FontWeight.Normal,
               maxLines = 2,
             )
@@ -322,7 +315,7 @@ fun DrosukeScreen(
       )
     }
 
-    // 右端パネル：キャラ＆ボタン
+    // 右端パネル：キャラ＆状態表示
     val colWidth = 240.dp
     Column(
       modifier = Modifier
@@ -333,13 +326,11 @@ fun DrosukeScreen(
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Bottom,
     ) {
-      // キャラクター
       DrosukeCharaView(
         isSpeaking = isSpeaking,
         modifier = Modifier.height(270.dp),
       )
 
-      // 状態ラベル
       Text(
         text = when (sttState) {
           SttState.IDLE -> when {
@@ -357,63 +348,6 @@ fun DrosukeScreen(
         color = Color.White,
         textAlign = TextAlign.Center,
       )
-
-      // マイクボタン（手動）
-      Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        // マイクボタン（手動でも押せる）
-        IconButton(
-          onClick = {
-            when {
-              !micPermissionGranted ->
-                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-              voskReady && (sttState == SttState.IDLE || sttState == SttState.ERROR)
-                  && !chatUiState.inProgress && !isSpeaking -> {
-                capturedBitmap = latestBitmap
-                sttState = SttState.LISTENING
-                vosk.startListening()
-              }
-            }
-          },
-          modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(
-              when {
-                sttState == SttState.LISTENING -> MaterialTheme.colorScheme.error
-                chatUiState.inProgress || sttState == SttState.PROCESSING ->
-                  MaterialTheme.colorScheme.surfaceVariant
-                else -> MaterialTheme.colorScheme.primary
-              }
-            ),
-        ) {
-          Icon(
-            Icons.Rounded.Mic,
-            contentDescription = "マイク",
-            tint = Color.White,
-            modifier = Modifier.size(24.dp),
-          )
-        }
-      }
     }
   }
-}
-
-private fun computeBitmapDiff(a: Bitmap, b: Bitmap): Float {
-  val size = 32
-  val sa = Bitmap.createScaledBitmap(a, size, size, false)
-  val sb = Bitmap.createScaledBitmap(b, size, size, false)
-  var diff = 0f
-  for (y in 0 until size) {
-    for (x in 0 until size) {
-      val pa = sa.getPixel(x, y)
-      val pb = sb.getPixel(x, y)
-      diff += kotlin.math.abs(AndroidColor.red(pa) - AndroidColor.red(pb))
-      diff += kotlin.math.abs(AndroidColor.green(pa) - AndroidColor.green(pb))
-      diff += kotlin.math.abs(AndroidColor.blue(pa) - AndroidColor.blue(pb))
-    }
-  }
-  return diff / (size * size * 3)
 }
