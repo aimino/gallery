@@ -81,6 +81,7 @@ fun DrosukeScreen(
   var subtitleVisible by remember { mutableStateOf(true) }
   var userText by remember { mutableStateOf("") }
   var aiText by remember { mutableStateOf("") }
+  var lastLlmReply by remember { mutableStateOf("") }
   var voskReady by remember { mutableStateOf(false) }
   var micPermissionGranted by remember {
     mutableStateOf(
@@ -173,10 +174,18 @@ fun DrosukeScreen(
           val skipWords = listOf("スキップ", "skip", "SKIP")
           val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
           if (!shouldSkip) {
-            // TTSのonStart非同期前にフラグを立ててListening再開の競合を防ぐ
-            isSpeaking = true
-            aiText = reply
-            speak(reply)
+            var filtered = trimmed
+            if (lastLlmReply.isNotEmpty() && filtered.startsWith(lastLlmReply)) {
+              filtered = filtered.removePrefix(lastLlmReply)
+                .trimStart('、', '。', '，', ',', ' ', '　')
+            }
+            if (filtered.isNotEmpty()) {
+              lastLlmReply = filtered
+              // TTSのonStart非同期前にフラグを立ててListening再開の競合を防ぐ
+              isSpeaking = true
+              aiText = filtered
+              speak(filtered)
+            }
           }
         }
         sttState = SttState.IDLE
@@ -200,6 +209,7 @@ fun DrosukeScreen(
       } else {
         userText = text
         if (text.contains("新しいゲーム") || text.contains("ニューゲーム") || text.contains("新しいラウンド")) {
+          lastLlmReply = ""
           chatViewModel.resetSession(
             task = task,
             model = selectedModel,
