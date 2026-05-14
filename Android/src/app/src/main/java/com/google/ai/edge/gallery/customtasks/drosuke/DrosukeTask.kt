@@ -47,10 +47,9 @@ class DrosukeTask @Inject constructor() : CustomTask {
     LlmChatModelHelper.initialize(
       context = context,
       model = model,
-      supportImage = true,
+      supportImage = false,
       supportAudio = false,
       onDone = onDone,
-      systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
     )
   }
 
