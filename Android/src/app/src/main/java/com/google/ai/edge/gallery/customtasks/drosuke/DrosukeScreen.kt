@@ -157,29 +157,43 @@ fun DrosukeScreen(
     sttState = SttState.PROCESSING
     val images = listOfNotNull(latestBitmap)
 
-    chatViewModel.generateResponse(
+    val dynamicPrompt = if (aiText.isBlank()) {
+      DROSUKE_SYSTEM_PROMPT
+    } else {
+      "${DROSUKE_SYSTEM_PROMPT}直前の返答:「${aiText}」。同じ内容は繰り返さず、新しい視点で答えて。"
+    }
+
+    chatViewModel.resetSession(
+      task = task,
       model = selectedModel,
-      input = text,
-      images = images,
-      onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+      supportImage = true,
+      systemInstruction = Contents.of(dynamicPrompt),
       onDone = {
-        val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+        chatViewModel.generateResponse(
           model = selectedModel,
-          type = ChatMessageType.TEXT,
-          side = ChatSide.AGENT,
-        ) as? ChatMessageText
-        lastMsg?.content?.let { reply ->
-          val trimmed = reply.trim()
-          val skipWords = listOf("スキップ", "skip", "SKIP")
-          val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
-          if (!shouldSkip) {
-            isSpeaking = true
-            aiText = trimmed
-            speak(trimmed)
-          }
-        }
-        sttState = SttState.IDLE
-      },
+          input = text,
+          images = images,
+          onError = { Log.e(TAG, "LLM error: $it"); sttState = SttState.IDLE },
+          onDone = {
+            val lastMsg = chatViewModel.getLastMessageWithTypeAndSide(
+              model = selectedModel,
+              type = ChatMessageType.TEXT,
+              side = ChatSide.AGENT,
+            ) as? ChatMessageText
+            lastMsg?.content?.let { reply ->
+              val trimmed = reply.trim()
+              val skipWords = listOf("スキップ", "skip", "SKIP")
+              val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
+              if (!shouldSkip) {
+                isSpeaking = true
+                aiText = trimmed
+                speak(trimmed)
+              }
+            }
+            sttState = SttState.IDLE
+          },
+        )
+      }
     )
   }
 
@@ -199,6 +213,7 @@ fun DrosukeScreen(
       } else {
         userText = text
         if (text.contains("新しいゲーム") || text.contains("ニューゲーム") || text.contains("新しいラウンド")) {
+          aiText = ""
           chatViewModel.resetSession(
             task = task,
             model = selectedModel,
