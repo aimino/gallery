@@ -59,8 +59,6 @@ import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
 import com.google.ai.edge.gallery.ui.common.chat.ChatSide
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.util.Locale
 
 private const val TAG = "DrosukeScreen"
@@ -81,7 +79,6 @@ fun DrosukeScreen(
   var subtitleVisible by remember { mutableStateOf(true) }
   var userText by remember { mutableStateOf("") }
   var aiText by remember { mutableStateOf("") }
-  var voskReady by remember { mutableStateOf(false) }
   var micPermissionGranted by remember {
     mutableStateOf(
       ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -90,8 +87,7 @@ fun DrosukeScreen(
   }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
-  val voskModelPath = context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-ja-0.22"
-  val vosk = remember { VoskSttHelper(modelPath = voskModelPath) }
+  val stt = remember { AndroidSttHelper(context) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
@@ -197,17 +193,9 @@ fun DrosukeScreen(
     )
   }
 
-  // Voskモデルをバックグラウンドで一度だけロード
-  LaunchedEffect(micPermissionGranted) {
-    if (micPermissionGranted && !voskReady && vosk.isModelAvailable) {
-      val success = withContext(Dispatchers.IO) { vosk.init() }
-      if (success) voskReady = true
-    }
-  }
-
-  // Vosk コールバック設定
+  // STT コールバック設定
   DisposableEffect(Unit) {
-    vosk.onResult = { text ->
+    stt.onResult = { text ->
       if (text.isBlank()) {
         sttState = SttState.IDLE  // 常時リッスンのLaunchedEffectが再開する
       } else {
@@ -226,23 +214,23 @@ fun DrosukeScreen(
         }
       }
     }
-    vosk.onPartialResult = { partial ->
+    stt.onPartialResult = { partial ->
       // ユーザーが話し始めたら TTS を即座にキャンセル（割り込み優先）
       if (partial.isNotBlank() && isSpeaking) {
         tts?.stop()
         isSpeaking = false
       }
     }
-    vosk.onError = { msg -> sttState = SttState.ERROR; sttErrorMsg = msg }
-    onDispose { vosk.destroy() }
+    stt.onError = { msg -> sttState = SttState.ERROR; sttErrorMsg = msg }
+    onDispose { stt.destroy() }
   }
 
-  // 常時リッスン: Vosk準備完了後、LLM/TTS停止後に自動で再開
-  LaunchedEffect(voskReady, chatUiState.inProgress, isSpeaking, micPermissionGranted, sttState) {
-    if (voskReady && micPermissionGranted && !chatUiState.inProgress && !isSpeaking
+  // 常時リッスン: LLM/TTS停止後に自動で再開
+  LaunchedEffect(chatUiState.inProgress, isSpeaking, micPermissionGranted, sttState) {
+    if (micPermissionGranted && !chatUiState.inProgress && !isSpeaking
         && sttState == SttState.IDLE) {
       sttState = SttState.LISTENING
-      vosk.startListening()
+      stt.startListening()
     }
   }
 
@@ -347,12 +335,7 @@ fun DrosukeScreen(
 
       Text(
         text = when (sttState) {
-          SttState.IDLE -> when {
-            !micPermissionGranted -> "許可必要"
-            !voskReady && vosk.isModelAvailable -> "初期化中..."
-            !vosk.isModelAvailable -> "モデル未配置"
-            else -> ""
-          }
+          SttState.IDLE -> if (!micPermissionGranted) "許可必要" else ""
           SttState.LISTENING -> "認識中..."
           SttState.PROCESSING -> "処理中..."
           SttState.ERROR -> sttErrorMsg
