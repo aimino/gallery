@@ -122,6 +122,7 @@ object LlmChatModelHelper : LlmModelHelper {
 
     // Create an instance of LiteRT LM engine and conversation.
     try {
+      ExperimentalFlags.enableSpeculativeDecoding = true
       val engine = Engine(engineConfig)
       engine.initialize()
 

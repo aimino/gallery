@@ -66,23 +66,6 @@ import java.util.Locale
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
 
-private fun filterNewSentences(newText: String, prevText: String): String {
-  val splitRegex = Regex("(?<=[。！？\n])")
-  val prevSentences = prevText.split(splitRegex)
-    .map { it.trim() }
-    .filter { it.isNotBlank() }
-    .toSet()
-  return newText.split(splitRegex)
-    .filter { chunk ->
-      val s = chunk.trim()
-      s.isNotBlank() && prevSentences.none { prev ->
-        prev == s || prev.contains(s) || s.contains(prev)
-      }
-    }
-    .joinToString("")
-    .trim()
-}
-
 enum class SttState { IDLE, LISTENING, PROCESSING, ERROR, OFFLINE_UNAVAILABLE }
 
 @Composable
@@ -98,7 +81,6 @@ fun DrosukeScreen(
   var subtitleVisible by remember { mutableStateOf(true) }
   var userText by remember { mutableStateOf("") }
   var aiText by remember { mutableStateOf("") }
-  val lastLlmReplyRef = remember { java.util.concurrent.atomic.AtomicReference("") }
   var voskReady by remember { mutableStateOf(false) }
   var micPermissionGranted by remember {
     mutableStateOf(
@@ -191,15 +173,9 @@ fun DrosukeScreen(
           val skipWords = listOf("スキップ", "skip", "SKIP")
           val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
           if (!shouldSkip) {
-            val prevText = lastLlmReplyRef.get()
-            val filtered = if (prevText.isEmpty()) trimmed else filterNewSentences(trimmed, prevText)
-            if (filtered.isNotEmpty()) {
-              lastLlmReplyRef.set(filtered)
-              // TTSのonStart非同期前にフラグを立ててListening再開の競合を防ぐ
-              isSpeaking = true
-              aiText = filtered
-              speak(filtered)
-            }
+            isSpeaking = true
+            aiText = trimmed
+            speak(trimmed)
           }
         }
         sttState = SttState.IDLE
@@ -223,7 +199,6 @@ fun DrosukeScreen(
       } else {
         userText = text
         if (text.contains("新しいゲーム") || text.contains("ニューゲーム") || text.contains("新しいラウンド")) {
-          lastLlmReplyRef.set("")
           chatViewModel.resetSession(
             task = task,
             model = selectedModel,
