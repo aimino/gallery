@@ -153,6 +153,10 @@ fun DrosukeScreen(
     sttState = SttState.PROCESSING
     val images = emptyList<Bitmap>() // DEBUG: 画像なしでテスト
 
+    chatViewModel.addMessage(
+      model = selectedModel,
+      message = ChatMessageText(content = text, side = ChatSide.USER),
+    )
     chatViewModel.generateResponse(
       model = selectedModel,
       input = text,
