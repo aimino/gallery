@@ -169,13 +169,9 @@ fun DrosukeScreen(
         ) as? ChatMessageText
         lastMsg?.content?.let { reply ->
           val trimmed = reply.trim()
-          val skipWords = listOf("スキップ", "skip", "SKIP")
-          val shouldSkip = skipWords.any { trimmed.lowercase().startsWith(it.lowercase()) }
-          if (!shouldSkip) {
-            isSpeaking = true
-            aiText = trimmed
-            speak(trimmed)
-          }
+          isSpeaking = true
+          aiText = trimmed
+          speak(trimmed)
         }
         sttState = SttState.IDLE
       },
