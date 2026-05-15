@@ -52,7 +52,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.gallery.ui.common.LiveCameraView
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
@@ -190,17 +189,7 @@ fun DrosukeScreen(
         sttState = SttState.IDLE  // 常時リッスンのLaunchedEffectが再開する
       } else {
         userText = text
-        if (text.contains("新しいゲーム") || text.contains("ニューゲーム") || text.contains("新しいラウンド")) {
-          chatViewModel.resetSession(
-            task = task,
-            model = selectedModel,
-            supportImage = true,
-            systemInstruction = Contents.of(DROSUKE_SYSTEM_PROMPT),
-            onDone = { sendToLlm(text) }
-          )
-        } else {
-          sendToLlm(text)
-        }
+        sendToLlm(text)
       }
     }
     stt.onPartialResult = { partial ->
