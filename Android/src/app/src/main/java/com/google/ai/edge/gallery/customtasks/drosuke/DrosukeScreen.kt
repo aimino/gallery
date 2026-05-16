@@ -93,7 +93,7 @@ fun DrosukeScreen(
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
   val voskModelPath = remember {
-    context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-ja-0.22"
+    context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-en-us-0.22-lgraph"
   }
   val stt = remember { VoskSttHelper(voskModelPath) }
   var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
@@ -137,7 +137,7 @@ fun DrosukeScreen(
     var t: TextToSpeech? = null
     t = TextToSpeech(context) { status ->
       if (status == TextToSpeech.SUCCESS) {
-        t?.language = Locale.JAPAN
+        t?.language = Locale.US
         t?.setPitch(1.1f)
         t?.setSpeechRate(1.1f)
         t?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -340,7 +340,7 @@ fun DrosukeScreen(
         ) {
           if (userText.isNotBlank()) {
             Text(
-              text = "あなた：$userText",
+              text = "You: $userText",
               fontSize = 13.sp,
               color = Color(0xFFADD8E6),
               fontWeight = FontWeight.Normal,
@@ -349,7 +349,7 @@ fun DrosukeScreen(
           }
           if (aiText.isNotBlank()) {
             Text(
-              text = "ドロ助：${aiText.take(100)}${if (aiText.length > 100) "…" else ""}",
+              text = "Drosuke: ${aiText.take(100)}${if (aiText.length > 100) "…" else ""}",
               fontSize = 13.sp,
               color = Color.White,
               maxLines = 3,

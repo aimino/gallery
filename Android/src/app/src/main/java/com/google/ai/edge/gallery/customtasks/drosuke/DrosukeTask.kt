@@ -14,7 +14,7 @@ import com.google.ai.edge.litertlm.Contents
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
-internal const val DROSUKE_SYSTEM_PROMPT = """あなたはAIアシスタントだよ。常に日本語で話してね。返答は150文字以内にして。"""
+internal const val DROSUKE_SYSTEM_PROMPT = """You are a friendly AI assistant. Always respond in natural American English. Keep your responses concise, under 150 characters."""
 
 class DrosukeTask @Inject constructor() : CustomTask {
 
