@@ -70,6 +70,7 @@ import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -197,6 +198,7 @@ fun DrosukeScreen(
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var turnCount by remember { mutableStateOf(0) }
   var isCompacting by remember { mutableStateOf(false) }
+  var hasGreeted by remember { mutableStateOf(false) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val chatUiState by chatViewModel.uiState.collectAsState()
@@ -415,6 +417,11 @@ fun DrosukeScreen(
       sttState = SttState.LISTENING
       userText = ""
       stt.startListening()
+      if (!hasGreeted) {
+        hasGreeted = true
+        delay(500)
+        sendToLlm("Please greet the user with a brief, friendly greeting.")
+      }
     }
   }
 
