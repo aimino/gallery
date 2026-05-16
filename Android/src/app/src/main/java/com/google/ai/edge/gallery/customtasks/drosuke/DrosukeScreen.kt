@@ -226,7 +226,7 @@ fun DrosukeScreen(
     if (text.isBlank()) return
     userText = text
     sttState = SttState.PROCESSING
-    val images = listOfNotNull(latestBitmap)
+    val images = if (cameraEnabled) listOfNotNull(latestBitmap) else emptyList()
 
     chatViewModel.addMessage(
       model = selectedModel,
