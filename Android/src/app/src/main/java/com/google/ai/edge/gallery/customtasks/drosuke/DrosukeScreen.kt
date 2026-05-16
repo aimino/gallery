@@ -478,7 +478,7 @@ fun DrosukeScreen(
               text = "Drosuke: ${aiText.take(100)}${if (aiText.length > 100) "…" else ""}",
               fontSize = 13.sp,
               color = Color.White,
-              maxLines = 3,
+              maxLines = 4,
             )
           }
         }
