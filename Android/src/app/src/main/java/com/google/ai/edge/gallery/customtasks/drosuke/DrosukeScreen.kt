@@ -32,6 +32,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -94,6 +96,7 @@ fun DrosukeScreen(
   var sttErrorMsg by remember { mutableStateOf("") }
   val stt = remember { AndroidSttHelper(context) }
   var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
+  var cameraEnabled by remember { mutableStateOf(true) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var turnCount by remember { mutableStateOf(0) }
   var isCompacting by remember { mutableStateOf(false) }
@@ -301,16 +304,21 @@ fun DrosukeScreen(
     val screenHeight = maxHeight
 
     // 背面カメラ映像（全画面背景）
-    LiveCameraView(
-      onBitmap = { bitmap, imageProxy ->
-        latestBitmap = bitmap
-        imageProxy.close()
-      },
-      modifier = Modifier.fillMaxSize(),
-      preferredSize = 1920,
-      useHardwarePreview = true,
-      cameraSelector = cameraSelector,
-    )
+    if (cameraEnabled) {
+      LiveCameraView(
+        onBitmap = { bitmap, imageProxy ->
+          if (cameraEnabled) latestBitmap = bitmap
+          else latestBitmap = null
+          imageProxy.close()
+        },
+        modifier = Modifier.fillMaxSize(),
+        preferredSize = 1920,
+        useHardwarePreview = true,
+        cameraSelector = cameraSelector,
+      )
+    } else {
+      Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+    }
 
     // 字幕オーバーレイ（画面下部左側）
     if (subtitleVisible && (userText.isNotBlank() || aiText.isNotBlank())) {
@@ -381,6 +389,7 @@ fun DrosukeScreen(
             CameraSelector.DEFAULT_BACK_CAMERA
           }
         },
+        enabled = cameraEnabled,
         modifier = Modifier
           .size(40.dp)
           .clip(CircleShape)
@@ -389,6 +398,22 @@ fun DrosukeScreen(
         Icon(
           imageVector = Icons.Default.Cameraswitch,
           contentDescription = "カメラ切り替え",
+          tint = Color.White,
+        )
+      }
+      IconButton(
+        onClick = { cameraEnabled = !cameraEnabled },
+        modifier = Modifier
+          .size(40.dp)
+          .clip(CircleShape)
+          .background(
+            if (cameraEnabled) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+            else Color.Gray.copy(alpha = 0.5f)
+          ),
+      ) {
+        Icon(
+          imageVector = if (cameraEnabled) Icons.Default.VideocamOff else Icons.Default.Videocam,
+          contentDescription = if (cameraEnabled) "カメラオフ" else "カメラオン",
           tint = Color.White,
         )
       }
