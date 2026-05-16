@@ -76,22 +76,50 @@ import kotlinx.coroutines.withContext
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
 private const val COMPACTION_THRESHOLD = 8
-private const val MEMORY_FILE = "drosuke_memory.txt"
-private const val MEMORY_MAX_LINES = 10
-
-private suspend fun loadMemory(context: Context): String =
+private suspend fun buildSystemPrompt(context: Context): String =
   withContext(Dispatchers.IO) {
-    val file = File(context.getExternalFilesDir(null), MEMORY_FILE)
-    if (!file.exists()) return@withContext ""
-    file.readLines().takeLast(MEMORY_MAX_LINES).joinToString("\n")
+    val baseDir = File(context.getExternalFilesDir(null), "drosuke_memory")
+    val cal = java.util.Calendar.getInstance()
+    val today = String.format(
+      "%04d-%02d-%02d",
+      cal.get(java.util.Calendar.YEAR),
+      cal.get(java.util.Calendar.MONTH) + 1,
+      cal.get(java.util.Calendar.DAY_OF_MONTH),
+    )
+
+    val soul   = File(baseDir, "SOUL.md").takeIf { it.exists() }?.readText() ?: ""
+    val user   = File(baseDir, "USER.md").takeIf { it.exists() }?.readText() ?: ""
+    val memory = File(baseDir, "MEMORY.md").takeIf { it.exists() }?.readText() ?: ""
+    val daily  = File(baseDir, "memory/$today.md").takeIf { it.exists() }?.readText() ?: ""
+
+    buildString {
+      append(DROSUKE_SYSTEM_PROMPT)
+      if (soul.isNotBlank())   append("\n\n[Character]\n$soul")
+      if (user.isNotBlank())   append("\n\n[User]\n$user")
+      if (memory.isNotBlank()) append("\n\n[Long-term memory]\n$memory")
+      if (daily.isNotBlank())  append("\n\n[Today's conversation]\n$daily")
+    }
   }
 
-private suspend fun saveMemory(context: Context, summary: String) {
+private suspend fun saveToMemory(context: Context, summary: String) {
   withContext(Dispatchers.IO) {
-    val file = File(context.getExternalFilesDir(null), MEMORY_FILE)
-    val lines = if (file.exists()) file.readLines().toMutableList() else mutableListOf()
-    lines.add(summary)
-    file.writeText(lines.takeLast(MEMORY_MAX_LINES).joinToString("\n"))
+    val baseDir = File(context.getExternalFilesDir(null), "drosuke_memory")
+    val cal = java.util.Calendar.getInstance()
+    val today = String.format(
+      "%04d-%02d-%02d",
+      cal.get(java.util.Calendar.YEAR),
+      cal.get(java.util.Calendar.MONTH) + 1,
+      cal.get(java.util.Calendar.DAY_OF_MONTH),
+    )
+
+    val dailyDir = File(baseDir, "memory")
+    dailyDir.mkdirs()
+    File(dailyDir, "$today.md").appendText("- $summary\n")
+
+    val memoryFile = File(baseDir, "MEMORY.md")
+    val lines = if (memoryFile.exists()) memoryFile.readLines().toMutableList() else mutableListOf()
+    lines.add("- [$today] $summary")
+    memoryFile.writeText(lines.takeLast(30).joinToString("\n"))
   }
 }
 
@@ -148,14 +176,12 @@ fun DrosukeScreen(
     if (status?.status?.name == "SUCCEEDED") {
       modelManagerViewModel.initializeModel(context, task = task, model = selectedModel, onDone = {
         coroutineScope.launch {
-          val memory = loadMemory(context)
-          if (memory.isNotBlank()) {
-            val promptWithMemory =
-              DROSUKE_SYSTEM_PROMPT + "\n\n[Memory from past conversations]\n" + memory
+          val systemPrompt = buildSystemPrompt(context)
+          if (systemPrompt.length > DROSUKE_SYSTEM_PROMPT.length) {
             chatViewModel.resetSession(
               task = task,
               model = selectedModel,
-              systemInstruction = Contents.of(promptWithMemory),
+              systemInstruction = Contents.of(systemPrompt),
               supportImage = true,
             )
           }
@@ -239,28 +265,24 @@ fun DrosukeScreen(
         ) as? ChatMessageText
         val summary = summaryMsg?.content?.trim() ?: ""
 
-        val newSystemPrompt = if (summary.isNotBlank()) {
-          "$DROSUKE_SYSTEM_PROMPT\n\n【過去の会話の要約】\n$summary"
-        } else {
-          DROSUKE_SYSTEM_PROMPT
-        }
-
-        if (summary.isNotBlank()) {
-          coroutineScope.launch { saveMemory(context, summary) }
-        }
-
-        chatViewModel.resetSession(
-          task = task,
-          model = selectedModel,
-          systemInstruction = Contents.of(newSystemPrompt),
-          supportImage = true,
-          onDone = {
-            turnCount = 0
-            isCompacting = false
-            aiText = ""
-            sttState = SttState.IDLE
+        coroutineScope.launch {
+          if (summary.isNotBlank()) {
+            saveToMemory(context, summary)
           }
-        )
+          val newSystemPrompt = buildSystemPrompt(context)
+          chatViewModel.resetSession(
+            task = task,
+            model = selectedModel,
+            systemInstruction = Contents.of(newSystemPrompt),
+            supportImage = true,
+            onDone = {
+              turnCount = 0
+              isCompacting = false
+              aiText = ""
+              sttState = SttState.IDLE
+            }
+          )
+        }
       },
     )
   }
