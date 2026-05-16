@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +30,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -92,6 +96,7 @@ fun DrosukeScreen(
     context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-ja-0.22"
   }
   val stt = remember { VoskSttHelper(voskModelPath) }
+  var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var turnCount by remember { mutableStateOf(0) }
   var isCompacting by remember { mutableStateOf(false) }
@@ -314,7 +319,7 @@ fun DrosukeScreen(
       modifier = Modifier.fillMaxSize(),
       preferredSize = 1920,
       useHardwarePreview = true,
-      cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
+      cameraSelector = cameraSelector,
     )
 
     // 字幕オーバーレイ（画面下部左側）
@@ -354,25 +359,49 @@ fun DrosukeScreen(
       }
     }
 
-    // CC ボタン（左上に固定・半透明）
-    IconButton(
-      onClick = { subtitleVisible = !subtitleVisible },
+    // CC ボタン＋カメラ切り替えボタン（左上に固定・半透明）
+    Row(
       modifier = Modifier
         .align(Alignment.TopStart)
-        .padding(top = 16.dp, start = 16.dp)
-        .size(40.dp)
-        .clip(CircleShape)
-        .background(
-          if (subtitleVisible) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
-          else Color.Gray.copy(alpha = 0.5f)
-        ),
+        .padding(top = 16.dp, start = 16.dp),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      Text(
-        text = "CC",
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        color = Color.White,
-      )
+      IconButton(
+        onClick = { subtitleVisible = !subtitleVisible },
+        modifier = Modifier
+          .size(40.dp)
+          .clip(CircleShape)
+          .background(
+            if (subtitleVisible) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+            else Color.Gray.copy(alpha = 0.5f)
+          ),
+      ) {
+        Text(
+          text = "CC",
+          fontSize = 11.sp,
+          fontWeight = FontWeight.Bold,
+          color = Color.White,
+        )
+      }
+      IconButton(
+        onClick = {
+          cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
+            CameraSelector.DEFAULT_FRONT_CAMERA
+          } else {
+            CameraSelector.DEFAULT_BACK_CAMERA
+          }
+        },
+        modifier = Modifier
+          .size(40.dp)
+          .clip(CircleShape)
+          .background(Color.Gray.copy(alpha = 0.5f)),
+      ) {
+        Icon(
+          imageVector = Icons.Default.Cameraswitch,
+          contentDescription = "カメラ切り替え",
+          tint = Color.White,
+        )
+      }
     }
 
     // 右端パネル：キャラ＆状態表示
