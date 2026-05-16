@@ -287,6 +287,7 @@ fun DrosukeScreen(
     if (micPermissionGranted && !chatUiState.inProgress && !isSpeaking
         && sttState == SttState.IDLE && !isCompacting) {
       sttState = SttState.LISTENING
+      userText = ""
       stt.startListening()
     }
   }
