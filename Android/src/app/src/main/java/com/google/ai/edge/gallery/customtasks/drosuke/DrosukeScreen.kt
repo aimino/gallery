@@ -224,24 +224,6 @@ fun DrosukeScreen(
     }
   }
 
-  // モデル初期化完了時に記憶入りシステムプロンプトを適用
-  LaunchedEffect(modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status) {
-    val initStatus = modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status
-    if (initStatus?.name == "INITIALIZED") {
-      coroutineScope.launch {
-        val systemPrompt = buildSystemPrompt(context)
-        if (systemPrompt.length > DROSUKE_SYSTEM_PROMPT.length) {
-          chatViewModel.resetSession(
-            task = task,
-            model = selectedModel,
-            systemInstruction = Contents.of(systemPrompt),
-            supportImage = true,
-          )
-        }
-      }
-    }
-  }
-
   // TTS 初期化
   val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -410,6 +392,29 @@ fun DrosukeScreen(
     onDispose { stt.destroy() }
   }
 
+  // モデル初期化完了時に記憶入りシステムプロンプトを適用・挨拶送信
+  LaunchedEffect(modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status) {
+    val initStatus = modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status
+    if (initStatus?.name == "INITIALIZED") {
+      coroutineScope.launch {
+        val systemPrompt = buildSystemPrompt(context)
+        if (systemPrompt.length > DROSUKE_SYSTEM_PROMPT.length) {
+          chatViewModel.resetSession(
+            task = task,
+            model = selectedModel,
+            systemInstruction = Contents.of(systemPrompt),
+            supportImage = true,
+          )
+        }
+        if (!hasGreeted) {
+          hasGreeted = true
+          delay(1500)
+          sendToLlm("Please greet the user with a brief, friendly greeting.")
+        }
+      }
+    }
+  }
+
   // 常時リッスン: LLM/TTS停止後に自動で再開
   LaunchedEffect(chatUiState.inProgress, isSpeaking, micPermissionGranted, sttState) {
     if (micPermissionGranted && !chatUiState.inProgress && !isSpeaking
@@ -417,11 +422,6 @@ fun DrosukeScreen(
       sttState = SttState.LISTENING
       userText = ""
       stt.startListening()
-      if (!hasGreeted) {
-        hasGreeted = true
-        delay(500)
-        sendToLlm("Please greet the user with a brief, friendly greeting.")
-      }
     }
   }
 
@@ -589,11 +589,15 @@ fun DrosukeScreen(
 
       Text(
         text = when (sttState) {
-          SttState.IDLE -> if (!micPermissionGranted) "許可必要" else ""
-          SttState.LISTENING -> "認識中..."
-          SttState.PROCESSING -> "処理中..."
+          SttState.IDLE -> when {
+            !micPermissionGranted -> "Permission required"
+            modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status?.name != "INITIALIZED" -> "Initializing..."
+            else -> ""
+          }
+          SttState.LISTENING -> "Listening..."
+          SttState.PROCESSING -> "Processing..."
           SttState.ERROR -> sttErrorMsg
-          SttState.OFFLINE_UNAVAILABLE -> "オフライン不可"
+          SttState.OFFLINE_UNAVAILABLE -> "Offline unavailable"
         },
         fontSize = 11.sp,
         color = Color.White,
