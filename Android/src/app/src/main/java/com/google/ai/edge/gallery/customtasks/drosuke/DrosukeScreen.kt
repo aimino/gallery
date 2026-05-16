@@ -83,7 +83,7 @@ fun DrosukeScreen(
   val context = LocalContext.current
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
-  var subtitleVisible by remember { mutableStateOf(true) }
+  var subtitleVisible by remember { mutableStateOf(false) }
   var userText by remember { mutableStateOf("") }
   var aiText by remember { mutableStateOf("") }
   var micPermissionGranted by remember {
@@ -96,7 +96,7 @@ fun DrosukeScreen(
   var sttErrorMsg by remember { mutableStateOf("") }
   val stt = remember { AndroidSttHelper(context) }
   var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
-  var cameraEnabled by remember { mutableStateOf(true) }
+  var cameraEnabled by remember { mutableStateOf(false) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var turnCount by remember { mutableStateOf(0) }
   var isCompacting by remember { mutableStateOf(false) }
