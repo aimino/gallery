@@ -22,9 +22,10 @@ class AndroidSttHelper(private val context: Context) {
 
   private fun createIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
+    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
   }
 
   fun startListening() {

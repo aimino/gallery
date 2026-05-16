@@ -92,10 +92,7 @@ fun DrosukeScreen(
   }
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
-  val voskModelPath = remember {
-    context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-en-us-0.22-lgraph"
-  }
-  val stt = remember { VoskSttHelper(voskModelPath) }
+  val stt = remember { AndroidSttHelper(context) }
   var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
   var turnCount by remember { mutableStateOf(0) }
@@ -114,12 +111,7 @@ fun DrosukeScreen(
     if (!micPermissionGranted) {
       micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
-    // Vosk モデルの初期化
-    if (stt.isModelAvailable) {
-      stt.init()
-    } else {
-      sttState = SttState.OFFLINE_UNAVAILABLE
-    }
+
   }
 
   // モデル初期化
@@ -279,9 +271,6 @@ fun DrosukeScreen(
         tts?.stop()
         isSpeaking = false
       }
-    }
-    stt.onSilence = {
-      sttState = SttState.IDLE  // 無音タイムアウト時もIDLEに戻す
     }
     stt.onError = { msg -> sttState = SttState.ERROR; sttErrorMsg = msg }
     onDispose { stt.destroy() }
