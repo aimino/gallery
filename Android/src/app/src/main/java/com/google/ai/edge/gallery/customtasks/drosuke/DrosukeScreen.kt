@@ -123,6 +123,49 @@ private suspend fun saveToMemory(context: Context, summary: String) {
   }
 }
 
+private suspend fun loadConfig(context: Context): Map<String, String> =
+  withContext(Dispatchers.IO) {
+    val file = File(context.getExternalFilesDir(null), "drosuke_memory/config.md")
+    if (!file.exists()) return@withContext emptyMap()
+    file.readLines()
+      .mapNotNull { line ->
+        val parts = line.split(":", limit = 2)
+        if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+      }.toMap()
+  }
+
+private suspend fun searchWeb(query: String, apiKey: String): String =
+  withContext(Dispatchers.IO) {
+    try {
+      val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+      val url = java.net.URL("https://api.search.brave.com/res/v1/web/search?q=$encoded&count=3")
+      val conn = url.openConnection() as java.net.HttpURLConnection
+      conn.setRequestProperty("Accept", "application/json")
+      conn.setRequestProperty("Accept-Encoding", "gzip")
+      conn.setRequestProperty("X-Subscription-Token", apiKey)
+      val stream = if (conn.contentEncoding == "gzip") {
+        java.util.zip.GZIPInputStream(conn.inputStream)
+      } else {
+        conn.inputStream
+      }
+      val response = stream.bufferedReader().readText()
+      val results = org.json.JSONObject(response)
+        .optJSONObject("web")
+        ?.optJSONArray("results")
+      if (results == null || results.length() == 0) return@withContext "No results found."
+      buildString {
+        for (i in 0 until minOf(3, results.length())) {
+          val item = results.getJSONObject(i)
+          val title = item.optString("title")
+          val desc = item.optString("description")
+          append("- $title: $desc\n")
+        }
+      }
+    } catch (e: Exception) {
+      "Search failed: ${e.message}"
+    }
+  }
+
 enum class SttState { IDLE, LISTENING, PROCESSING, ERROR, OFFLINE_UNAVAILABLE }
 
 @Composable
@@ -310,16 +353,29 @@ fun DrosukeScreen(
         ) as? ChatMessageText
         lastMsg?.content?.let { reply ->
           val trimmed = reply.trim()
-          isSpeaking = true
-          aiText = trimmed
-          speak(trimmed)
+          val searchMatch = Regex("""\[SEARCH:\s*(.+?)\]""").find(trimmed)
+          if (searchMatch != null) {
+            val query = searchMatch.groupValues[1]
+            aiText = "Searching..."
+            coroutineScope.launch {
+              val config = loadConfig(context)
+              val apiKey = config["BRAVE_API_KEY"] ?: ""
+              val results = if (apiKey.isNotBlank()) searchWeb(query, apiKey) else "No API key."
+              val followUp = "Search results for \"$query\":\n$results\n\nPlease answer based on these results."
+              sendToLlm(followUp)
+            }
+          } else {
+            isSpeaking = true
+            aiText = trimmed
+            speak(trimmed)
+            turnCount++
+            if (turnCount >= COMPACTION_THRESHOLD) {
+              compact()
+              return@generateResponse
+            }
+            sttState = SttState.IDLE
+          }
         }
-        turnCount++
-        if (turnCount >= COMPACTION_THRESHOLD) {
-          compact()
-          return@generateResponse
-        }
-        sttState = SttState.IDLE
       },
     )
   }
