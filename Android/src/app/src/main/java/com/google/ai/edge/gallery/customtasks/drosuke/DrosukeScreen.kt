@@ -2,6 +2,7 @@ package com.google.ai.edge.gallery.customtasks.drosuke
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.os.Handler
@@ -45,6 +46,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,11 +67,33 @@ import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
 import com.google.ai.edge.gallery.ui.common.chat.ChatSide
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
 private const val COMPACTION_THRESHOLD = 8
+private const val MEMORY_FILE = "drosuke_memory.txt"
+private const val MEMORY_MAX_LINES = 10
+
+private suspend fun loadMemory(context: Context): String =
+  withContext(Dispatchers.IO) {
+    val file = File(context.getExternalFilesDir(null), MEMORY_FILE)
+    if (!file.exists()) return@withContext ""
+    file.readLines().takeLast(MEMORY_MAX_LINES).joinToString("\n")
+  }
+
+private suspend fun saveMemory(context: Context, summary: String) {
+  withContext(Dispatchers.IO) {
+    val file = File(context.getExternalFilesDir(null), MEMORY_FILE)
+    val lines = if (file.exists()) file.readLines().toMutableList() else mutableListOf()
+    lines.add(summary)
+    file.writeText(lines.takeLast(MEMORY_MAX_LINES).joinToString("\n"))
+  }
+}
 
 enum class SttState { IDLE, LISTENING, PROCESSING, ERROR, OFFLINE_UNAVAILABLE }
 
@@ -81,6 +105,7 @@ fun DrosukeScreen(
   setTopBarVisible: (Boolean) -> Unit = {},
 ) {
   val context = LocalContext.current
+  val coroutineScope = rememberCoroutineScope()
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
   var subtitleVisible by remember { mutableStateOf(false) }
@@ -121,7 +146,21 @@ fun DrosukeScreen(
   LaunchedEffect(modelManagerUiState.modelDownloadStatus[selectedModel.name]) {
     val status = modelManagerUiState.modelDownloadStatus[selectedModel.name]
     if (status?.status?.name == "SUCCEEDED") {
-      modelManagerViewModel.initializeModel(context, task = task, model = selectedModel)
+      modelManagerViewModel.initializeModel(context, task = task, model = selectedModel, onDone = {
+        coroutineScope.launch {
+          val memory = loadMemory(context)
+          if (memory.isNotBlank()) {
+            val promptWithMemory =
+              DROSUKE_SYSTEM_PROMPT + "\n\n[Memory from past conversations]\n" + memory
+            chatViewModel.resetSession(
+              task = task,
+              model = selectedModel,
+              systemInstruction = Contents.of(promptWithMemory),
+              supportImage = true,
+            )
+          }
+        }
+      })
     }
   }
 
@@ -204,6 +243,10 @@ fun DrosukeScreen(
           "$DROSUKE_SYSTEM_PROMPT\n\n【過去の会話の要約】\n$summary"
         } else {
           DROSUKE_SYSTEM_PROMPT
+        }
+
+        if (summary.isNotBlank()) {
+          coroutineScope.launch { saveMemory(context, summary) }
         }
 
         chatViewModel.resetSession(
