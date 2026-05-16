@@ -93,7 +93,7 @@ fun DrosukeScreen(
   var tts by remember { mutableStateOf<TextToSpeech?>(null) }
   var sttErrorMsg by remember { mutableStateOf("") }
   val voskModelPath = remember {
-    context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-en-us-0.22"
+    context.getExternalFilesDir(null)?.absolutePath + "/vosk-model-en-us-0.22-lgraph"
   }
   val stt = remember { VoskSttHelper(voskModelPath) }
   var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
