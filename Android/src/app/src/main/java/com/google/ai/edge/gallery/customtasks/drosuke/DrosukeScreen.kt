@@ -53,6 +53,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.LiveCameraView
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
 import com.google.ai.edge.gallery.ui.common.chat.ChatSide
@@ -62,6 +63,7 @@ import java.util.Locale
 
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
+private const val COMPACTION_THRESHOLD = 8
 
 enum class SttState { IDLE, LISTENING, PROCESSING, ERROR, OFFLINE_UNAVAILABLE }
 
@@ -88,6 +90,8 @@ fun DrosukeScreen(
   var sttErrorMsg by remember { mutableStateOf("") }
   val stt = remember { AndroidSttHelper(context) }
   var latestBitmap by remember { mutableStateOf<Bitmap?>(null) }
+  var turnCount by remember { mutableStateOf(0) }
+  var isCompacting by remember { mutableStateOf(false) }
   val chatViewModel: LlmChatViewModel = hiltViewModel()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val chatUiState by chatViewModel.uiState.collectAsState()
@@ -146,6 +150,67 @@ fun DrosukeScreen(
     tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, params, UTTERANCE_ID)
   }
 
+  fun compact() {
+    isCompacting = true
+    sttState = SttState.PROCESSING
+    aiText = "まとめ中..."
+
+    val messages = chatUiState.messagesByModel[selectedModel.name] ?: emptyList()
+    val historyText = messages
+      .filterIsInstance<ChatMessageText>()
+      .joinToString("\n") { msg ->
+        val speaker = if (msg.side == ChatSide.USER) "ユーザー" else "AI"
+        "$speaker: ${msg.content}"
+      }
+
+    if (historyText.isBlank()) {
+      isCompacting = false
+      sttState = SttState.IDLE
+      return
+    }
+
+    val summaryPrompt = "以下の会話を3文以内で簡潔に要約してください。要約のみ出力し、他は何も出力しないでください。\n\n$historyText"
+
+    chatViewModel.generateResponse(
+      model = selectedModel,
+      input = summaryPrompt,
+      images = emptyList(),
+      onError = {
+        Log.e(TAG, "Compaction error: $it")
+        isCompacting = false
+        sttState = SttState.IDLE
+        aiText = ""
+      },
+      onDone = {
+        val summaryMsg = chatViewModel.getLastMessageWithTypeAndSide(
+          model = selectedModel,
+          type = ChatMessageType.TEXT,
+          side = ChatSide.AGENT,
+        ) as? ChatMessageText
+        val summary = summaryMsg?.content?.trim() ?: ""
+
+        val newSystemPrompt = if (summary.isNotBlank()) {
+          "$DROSUKE_SYSTEM_PROMPT\n\n【過去の会話の要約】\n$summary"
+        } else {
+          DROSUKE_SYSTEM_PROMPT
+        }
+
+        chatViewModel.resetSession(
+          task = task,
+          model = selectedModel,
+          systemInstruction = Contents.of(newSystemPrompt),
+          supportImage = true,
+          onDone = {
+            turnCount = 0
+            isCompacting = false
+            aiText = ""
+            sttState = SttState.IDLE
+          }
+        )
+      },
+    )
+  }
+
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
     userText = text
@@ -172,6 +237,11 @@ fun DrosukeScreen(
           isSpeaking = true
           aiText = trimmed
           speak(trimmed)
+        }
+        turnCount++
+        if (turnCount >= COMPACTION_THRESHOLD) {
+          compact()
+          return@generateResponse
         }
         sttState = SttState.IDLE
       },
@@ -202,7 +272,7 @@ fun DrosukeScreen(
   // 常時リッスン: LLM/TTS停止後に自動で再開
   LaunchedEffect(chatUiState.inProgress, isSpeaking, micPermissionGranted, sttState) {
     if (micPermissionGranted && !chatUiState.inProgress && !isSpeaking
-        && sttState == SttState.IDLE) {
+        && sttState == SttState.IDLE && !isCompacting) {
       sttState = SttState.LISTENING
       stt.startListening()
     }
