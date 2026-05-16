@@ -594,7 +594,7 @@ fun DrosukeScreen(
             modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status?.name != "INITIALIZED" -> "Initializing..."
             else -> ""
           }
-          SttState.LISTENING -> "Listening..."
+          SttState.LISTENING -> if (modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status?.name != "INITIALIZED") "Initializing..." else "Listening..."
           SttState.PROCESSING -> "Processing..."
           SttState.ERROR -> sttErrorMsg
           SttState.OFFLINE_UNAVAILABLE -> "Offline unavailable"
