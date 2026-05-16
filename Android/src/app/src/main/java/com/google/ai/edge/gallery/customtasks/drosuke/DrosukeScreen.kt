@@ -394,7 +394,7 @@ fun DrosukeScreen(
         modifier = Modifier
           .size(40.dp)
           .clip(CircleShape)
-          .background(Color.Gray.copy(alpha = 0.5f)),
+          .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)),
       ) {
         Icon(
           imageVector = Icons.Default.Cameraswitch,
