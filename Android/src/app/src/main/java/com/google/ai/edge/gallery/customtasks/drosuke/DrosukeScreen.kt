@@ -150,6 +150,7 @@ fun DrosukeScreen(
       .replace(Regex("#{1,6}\\s"), "")
       .replace(Regex("`+"), "")
       .replace(Regex("_{2,}"), "")
+      .replace(Regex("[\\p{So}\\p{Cn}\\p{Cs}]"), "")  // 絵文字を除去
       .trim()
     val params = Bundle()
     params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, UTTERANCE_ID)
