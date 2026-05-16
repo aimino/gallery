@@ -162,6 +162,7 @@ fun DrosukeScreen(
   fun compact() {
     isCompacting = true
     sttState = SttState.PROCESSING
+    userText = ""
     aiText = "まとめ中..."
 
     val messages = chatUiState.messagesByModel[selectedModel.name] ?: emptyList()
