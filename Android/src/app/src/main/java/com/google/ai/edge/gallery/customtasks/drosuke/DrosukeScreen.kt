@@ -179,7 +179,8 @@ fun DrosukeScreen(
   val coroutineScope = rememberCoroutineScope()
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
-  var subtitleVisible by remember { mutableStateOf(false) }
+  var userSubtitleVisible by remember { mutableStateOf(true) }
+  var aiSubtitleVisible by remember { mutableStateOf(false) }
   var userText by remember { mutableStateOf("") }
   var aiText by remember { mutableStateOf("") }
   var micPermissionGranted by remember {
@@ -442,7 +443,7 @@ fun DrosukeScreen(
     }
 
     // 字幕オーバーレイ（画面下部左側）
-    if (subtitleVisible && (userText.isNotBlank() || aiText.isNotBlank())) {
+    if ((userSubtitleVisible && userText.isNotBlank()) || (aiSubtitleVisible && aiText.isNotBlank())) {
       Box(
         modifier = Modifier
           .align(Alignment.BottomStart)
@@ -457,7 +458,7 @@ fun DrosukeScreen(
             .padding(horizontal = 12.dp, vertical = 8.dp),
           verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-          if (userText.isNotBlank()) {
+          if (userSubtitleVisible && userText.isNotBlank()) {
             Text(
               text = "You: $userText",
               fontSize = 13.sp,
@@ -466,7 +467,7 @@ fun DrosukeScreen(
               maxLines = 2,
             )
           }
-          if (aiText.isNotBlank()) {
+          if (aiSubtitleVisible && aiText.isNotBlank()) {
             Text(
               text = "Drosuke: ${aiText.take(100)}${if (aiText.length > 100) "…" else ""}",
               fontSize = 13.sp,
@@ -486,17 +487,34 @@ fun DrosukeScreen(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       IconButton(
-        onClick = { subtitleVisible = !subtitleVisible },
+        onClick = { userSubtitleVisible = !userSubtitleVisible },
         modifier = Modifier
           .size(40.dp)
           .clip(CircleShape)
           .background(
-            if (subtitleVisible) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+            if (userSubtitleVisible) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
             else Color.Gray.copy(alpha = 0.5f)
           ),
       ) {
         Text(
-          text = "CC",
+          text = "U",
+          fontSize = 11.sp,
+          fontWeight = FontWeight.Bold,
+          color = Color.White,
+        )
+      }
+      IconButton(
+        onClick = { aiSubtitleVisible = !aiSubtitleVisible },
+        modifier = Modifier
+          .size(40.dp)
+          .clip(CircleShape)
+          .background(
+            if (aiSubtitleVisible) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+            else Color.Gray.copy(alpha = 0.5f)
+          ),
+      ) {
+        Text(
+          text = "A",
           fontSize = 11.sp,
           fontWeight = FontWeight.Bold,
           color = Color.White,
