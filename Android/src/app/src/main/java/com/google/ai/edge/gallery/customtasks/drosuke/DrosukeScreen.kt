@@ -214,23 +214,29 @@ fun DrosukeScreen(
 
   }
 
-  // モデル初期化
+  // モデル初期化（初回ダウンロード完了時）
   LaunchedEffect(modelManagerUiState.modelDownloadStatus[selectedModel.name]) {
     val status = modelManagerUiState.modelDownloadStatus[selectedModel.name]
     if (status?.status?.name == "SUCCEEDED") {
-      modelManagerViewModel.initializeModel(context, task = task, model = selectedModel, onDone = {
-        coroutineScope.launch {
-          val systemPrompt = buildSystemPrompt(context)
-          if (systemPrompt.length > DROSUKE_SYSTEM_PROMPT.length) {
-            chatViewModel.resetSession(
-              task = task,
-              model = selectedModel,
-              systemInstruction = Contents.of(systemPrompt),
-              supportImage = true,
-            )
-          }
+      modelManagerViewModel.initializeModel(context, task = task, model = selectedModel)
+    }
+  }
+
+  // モデル初期化完了時に記憶入りシステムプロンプトを適用
+  LaunchedEffect(modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status) {
+    val initStatus = modelManagerUiState.modelInitializationStatus[selectedModel.name]?.status
+    if (initStatus?.name == "INITIALIZED") {
+      coroutineScope.launch {
+        val systemPrompt = buildSystemPrompt(context)
+        if (systemPrompt.length > DROSUKE_SYSTEM_PROMPT.length) {
+          chatViewModel.resetSession(
+            task = task,
+            model = selectedModel,
+            systemInstruction = Contents.of(systemPrompt),
+            supportImage = true,
+          )
         }
-      })
+      }
     }
   }
 
