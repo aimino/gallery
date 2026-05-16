@@ -101,7 +101,8 @@ fun LiveCameraView(
         }
       }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(cameraSelector) {
+      cameraProvider?.unbindAll()
       when (PackageManager.PERMISSION_GRANTED) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) -> {
           cameraProvider =
@@ -155,7 +156,8 @@ fun LiveCameraView(
       }
     }
 
-  LaunchedEffect(Unit) {
+  LaunchedEffect(cameraSelector) {
+    cameraProvider?.unbindAll()
     // Check permission.
     when (PackageManager.PERMISSION_GRANTED) {
       // Already got permission. Call the lambda.
