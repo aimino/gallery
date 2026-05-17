@@ -160,7 +160,7 @@ private suspend fun searchWeb(query: String, apiKey: String): String =
         for (i in 0 until minOf(3, results.length())) {
           val item = results.getJSONObject(i)
           val title = item.optString("title")
-          val desc = item.optString("description")
+          val desc = item.optString("description").take(150)
           append("- $title: $desc\n")
         }
       }
@@ -368,6 +368,8 @@ fun DrosukeScreen(
               val apiKey = config["BRAVE_API_KEY"] ?: ""
               val results = if (apiKey.isNotBlank()) searchWeb(query, apiKey) else "No API key."
               val followUp = "Search results for \"$query\":\n$results\n\nPlease answer based on these results."
+              chatViewModel.resetSession(systemInstruction = Contents.of(buildSystemPrompt(context)))
+              turnCount = 0
               sendToLlm(followUp)
             }
           } else {
