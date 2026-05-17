@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.app.ActivityManager
+import android.os.Debug
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
@@ -328,6 +330,14 @@ fun DrosukeScreen(
 
   fun sendToLlm(text: String) {
     if (text.isBlank()) return
+    val memInfo = ActivityManager.MemoryInfo().also {
+      (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(it)
+    }
+    val rt = Runtime.getRuntime()
+    Log.d(TAG, "[Memory] sys=${memInfo.availMem / 1024 / 1024}/${memInfo.totalMem / 1024 / 1024}MB" +
+      " jvm=${(rt.totalMemory() - rt.freeMemory()) / 1024 / 1024}/${rt.totalMemory() / 1024 / 1024}MB" +
+      " native=${Debug.getNativeHeapAllocatedSize() / 1024 / 1024}MB" +
+      " lowMem=${memInfo.lowMemory}")
     userText = text
     sttState = SttState.PROCESSING
     val images = if (cameraEnabled) listOfNotNull(latestBitmap) else emptyList()
