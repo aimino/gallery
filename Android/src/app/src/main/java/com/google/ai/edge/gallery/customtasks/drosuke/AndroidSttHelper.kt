@@ -80,11 +80,14 @@ class AndroidSttHelper(private val context: Context) {
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "音声タイムアウト"
         else -> "不明なエラー($error)"
       }
-      Log.e(TAG, "onError: $msg")
       // タイムアウトや無音は空結果として扱い、常時リッスンを再開させる
       if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
         onResult?.invoke("")
+      } else if (error == SpeechRecognizer.ERROR_CLIENT) {
+        // 起動タイミング起因の一時的エラー。実害なしなので警告レベルに留める
+        Log.w(TAG, "onError (ignored): $msg")
       } else {
+        Log.e(TAG, "onError: $msg")
         onError?.invoke(msg)
       }
     }
