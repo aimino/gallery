@@ -78,7 +78,7 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "DrosukeScreen"
 private const val UTTERANCE_ID = "drosuke_tts"
-private const val COMPACTION_THRESHOLD = 8
+private const val COMPACTION_THRESHOLD = 5
 private suspend fun buildSystemPrompt(context: Context): String =
   withContext(Dispatchers.IO) {
     val baseDir = File(context.getExternalFilesDir(null), "drosuke_memory")
