@@ -368,9 +368,17 @@ fun DrosukeScreen(
               val apiKey = config["BRAVE_API_KEY"] ?: ""
               val results = if (apiKey.isNotBlank()) searchWeb(query, apiKey) else "No API key."
               val followUp = "Search results for \"$query\":\n$results\n\nPlease answer based on these results."
-              chatViewModel.resetSession(systemInstruction = Contents.of(buildSystemPrompt(context)))
-              turnCount = 0
-              sendToLlm(followUp)
+              val newSystemPrompt = buildSystemPrompt(context)
+              chatViewModel.resetSession(
+                task = task,
+                model = selectedModel,
+                systemInstruction = Contents.of(newSystemPrompt),
+                supportImage = true,
+                onDone = {
+                  turnCount = 0
+                  sendToLlm(followUp)
+                }
+              )
             }
           } else {
             isSpeaking = true
