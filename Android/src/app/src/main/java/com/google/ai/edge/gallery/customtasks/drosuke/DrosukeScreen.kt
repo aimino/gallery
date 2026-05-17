@@ -497,10 +497,10 @@ fun DrosukeScreen(
           }
           if (aiSubtitleVisible && aiText.isNotBlank()) {
             Text(
-              text = "Drosuke: ${aiText.take(200)}${if (aiText.length > 200) "…" else ""}",
+              text = "Drosuke: ${aiText.take(500)}${if (aiText.length > 500) "…" else ""}",
               fontSize = 13.sp,
               color = Color.White,
-              maxLines = 4,
+              maxLines = 8,
             )
           }
         }
