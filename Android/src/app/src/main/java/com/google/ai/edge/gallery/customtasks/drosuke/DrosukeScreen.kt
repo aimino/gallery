@@ -442,6 +442,23 @@ fun DrosukeScreen(
     }
   }
 
+  // STTウォッチドッグ: LISTENING状態が15秒続いたら再起動、ERROR後2秒でIDLEリセット
+  LaunchedEffect(sttState) {
+    if (sttState == SttState.LISTENING) {
+      delay(15000L)
+      if (sttState == SttState.LISTENING) {
+        Log.w(TAG, "STT watchdog: restarting stuck recognizer")
+        stt.stopListening()
+        sttState = SttState.IDLE
+      }
+    } else if (sttState == SttState.ERROR) {
+      delay(2000L)
+      if (sttState == SttState.ERROR) {
+        sttState = SttState.IDLE
+      }
+    }
+  }
+
   // ドロ助画面は横向き固定
   val activity = context as? Activity
   DisposableEffect(Unit) {
