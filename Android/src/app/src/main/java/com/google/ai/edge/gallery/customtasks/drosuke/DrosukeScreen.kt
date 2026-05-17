@@ -177,6 +177,11 @@ fun DrosukeScreen(
   setTopBarVisible: (Boolean) -> Unit = {},
 ) {
   val context = LocalContext.current
+
+  LaunchedEffect(Unit) {
+    File(context.getExternalFilesDir(null), "drosuke_memory/memory").mkdirs()
+  }
+
   val coroutineScope = rememberCoroutineScope()
   var isSpeaking by remember { mutableStateOf(false) }
   var sttState by remember { mutableStateOf(SttState.IDLE) }
